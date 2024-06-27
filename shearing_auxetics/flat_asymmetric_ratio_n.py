@@ -7,10 +7,10 @@ COMPLIANCE_LENGTH = 3
 COMPLIANCE_THICKNESS = 0.6
 COMPLIANCE_FILLET_RADIUS = 1
 
-X_SIZE, Y_SIZE, THICKNESS = 15, 15, 4
-X_GRID, Y_GRID = 4, 5
+X_SIZE, Y_SIZE, THICKNESS = 6, 15, 4
+X_GRID, Y_GRID = 8, 5
 
-ASYMMETRIC_RATIO = 0.5
+ASYMMETRIC_RATIO = 2
 
 w, h, rh = (
     X_SIZE + COMPLIANCE_LENGTH,
@@ -79,7 +79,7 @@ for j in range(Y_GRID):
 region = cube(
     [
         X_GRID * w - COMPLIANCE_LENGTH,
-        (Y_GRID // 2) * (h + rh) - COMPLIANCE_LENGTH + (X_GRID - 2) * w,
+        (Y_GRID // 2) * (h + rh) - COMPLIANCE_LENGTH + (X_GRID - 2) * h,
         THICKNESS,
     ]
 )
@@ -88,6 +88,6 @@ a = translate([0, -h, 0])(a)
 
 scad_render_to_file(
     a,
-    f"./shearing_auxetics/flat_asymmetric_ratio_{ASYMMETRIC_RATIO}.scad",
+    f"./shearing_auxetics/flat_asymmetric_ratio_{ASYMMETRIC_RATIO}_{X_GRID}_{Y_GRID}.scad",
     file_header="$fn=32;",
 )
