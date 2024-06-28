@@ -39,12 +39,12 @@ height *= np.sin(compliance_angle)
 
 
 # compute gap offset
-x_h = np.sqrt((COMPLIANCE_LENGTH / 2 + X_SIZE) ** 2 + (COMPLIANCE_LENGTH / 2) ** 2)
-x_a = np.asin((COMPLIANCE_LENGTH / 2) / (x_h))
-x_t = 90 - compliance_angle - x_a
-x_rad_offset = x_h * np.cos(x_t) / radius
-x_ver_offset = x_h * np.sin(x_t)
-
+x_x_offset = (X_SIZE + COMPLIANCE_LENGTH / 2) * np.cos(np.pi / 2 - compliance_angle)
+x_x_offset += (COMPLIANCE_LENGTH / 2) * np.cos(compliance_angle)
+x_rad_offset = x_x_offset / radius
+x_y_offset = (X_SIZE + COMPLIANCE_LENGTH / 2) * np.sin(np.pi / 2 - compliance_angle)
+x_y_offset -= (COMPLIANCE_LENGTH / 2) * np.sin(compliance_angle)
+x_ver_offset = x_y_offset
 
 # build
 
@@ -83,7 +83,7 @@ for j in range(Y_GRID):
     if j % 2 == 0:
         gap = x_gap
         rx = compliance_angle
-        rdz = 0
+        rdz = -x_rad_offset
         tdz = x_ver_offset
     else:
         gap = y_gap
@@ -98,7 +98,8 @@ for j in range(Y_GRID):
         b = rotate([0, 0, (t + rdz) * 180 / np.pi])(b)
         b = up(j * Y_SIZE + tdz)(b)
 
-        a -= b
+        if j % 2 == 0:
+            a -= b
 
 
 scad_render_to_file(
