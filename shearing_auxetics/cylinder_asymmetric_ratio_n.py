@@ -41,10 +41,22 @@ height *= np.sin(compliance_angle)
 # compute gap offset
 x_x_offset = (X_SIZE + COMPLIANCE_LENGTH / 2) * np.cos(np.pi / 2 - compliance_angle)
 x_x_offset += (COMPLIANCE_LENGTH / 2) * np.cos(compliance_angle)
-x_rad_offset = x_x_offset / radius
+x_rad_offset = -x_x_offset / radius
 x_y_offset = (X_SIZE + COMPLIANCE_LENGTH / 2) * np.sin(np.pi / 2 - compliance_angle)
 x_y_offset -= (COMPLIANCE_LENGTH / 2) * np.sin(compliance_angle)
 x_ver_offset = x_y_offset
+
+y_x_offset = -(X_SIZE + COMPLIANCE_LENGTH / 2) * np.cos(np.pi / 2 - compliance_angle)
+y_x_offset += (
+    ((ASYMMETRIC_RATIO + 1) * Y_SIZE + COMPLIANCE_LENGTH) / 2 * np.cos(compliance_angle)
+)
+y_rad_offset = y_x_offset / radius
+y_y_offset = (X_SIZE + COMPLIANCE_LENGTH / 2) * np.sin(np.pi / 2 - compliance_angle)
+y_y_offset += (
+    ((ASYMMETRIC_RATIO + 1) * Y_SIZE + COMPLIANCE_LENGTH) / 2 * np.sin(compliance_angle)
+)
+y_ver_offset = y_y_offset
+
 
 # build
 
@@ -83,23 +95,22 @@ for j in range(Y_GRID):
     if j % 2 == 0:
         gap = x_gap
         rx = compliance_angle
-        rdz = -x_rad_offset
+        rdz = x_rad_offset
         tdz = x_ver_offset
     else:
         gap = y_gap
         rx = -(np.pi / 2 - compliance_angle)
-        rdz = 0
-        tdz = 0
+        rdz = y_rad_offset
+        tdz = y_ver_offset
 
     gap = rotate([0, 90, 0])(gap)
 
     for t in base_radians:
         b = rotate([rx * 180 / np.pi, 0, 0])(gap)
         b = rotate([0, 0, (t + rdz) * 180 / np.pi])(b)
-        b = up(j * Y_SIZE + tdz)(b)
+        b = up((j // 2) * Y_SIZE + tdz)(b)
 
-        if j % 2 == 0:
-            a -= b
+        a -= b
 
 
 scad_render_to_file(
