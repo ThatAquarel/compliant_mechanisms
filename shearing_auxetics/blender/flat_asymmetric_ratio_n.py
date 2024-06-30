@@ -5,7 +5,7 @@ import math
 # clear old objects
 bpy.ops.object.mode_set(mode="OBJECT")
 
-CUTOUTS_COLLECTION = "Cutouts"
+CUTOUTS_COLLECTION, FLANGES_COLLECTION = "Cutouts", "Flanges"
 
 
 def del_collection(coll):
@@ -18,14 +18,18 @@ names_filter = ["Light", "Camera", "Point", "Plane"]
 
 try:
     for i in bpy.data.objects:
-
         if any(i.name in name for name in names_filter):
             continue
-
         with bpy.context.temp_override(selected_objects=[i]):
             bpy.ops.object.delete()
-
+except:
+    pass
+try:
     del_collection(bpy.data.collections[CUTOUTS_COLLECTION])
+except:
+    pass
+try:
+    del_collection(bpy.data.collections[FLANGES_COLLECTION])
 except:
     pass
 
@@ -132,6 +136,21 @@ def array_offset(
     bpy.ops.object.modifier_apply(modifier=name)
 
 
+def boolean(x, operation="UNION", operand_type="OBJECT", name="Boolean"):
+    bpy.ops.object.modifier_add(type="BOOLEAN")
+    mod = bpy.context.object.modifiers.get("Boolean")
+    if mod:
+        mod.name = name
+    bpy.context.object.modifiers[name].operand_type = operand_type
+    bpy.context.object.modifiers[name].operation = operation
+    bpy.context.object.modifiers[name].solver = "EXACT"
+    if operand_type == "OBJECT":
+        bpy.context.object.modifiers[name].object = x
+    else:
+        bpy.context.object.modifiers[name].collection = x
+    bpy.ops.object.modifier_apply(modifier=name)
+
+
 cutout_collection = bpy.data.collections.new(CUTOUTS_COLLECTION)
 
 x_cutout_0 = build_cutout(
@@ -202,6 +221,48 @@ bpy.ops.transform.translate(
 hide(corner_cutout)
 cutout_collection.objects.link(corner_cutout)
 
+compliance_angle = math.atan(w / h)
+compliance_hypotenuse = w / math.sin(compliance_angle)
+
+flanges_collection = bpy.data.collections.new(FLANGES_COLLECTION)
+
+support_0 = primitive_of_size(SUPPORT_WIDTH, SUPPORT_HEIGHT, THICKNESS)
+bpy.ops.transform.translate(
+    value=(-SUPPORT_WIDTH / 2, -SUPPORT_HEIGHT + SUPPORT_WIDTH, 0)
+)
+flange_0 = primitive_of_size(compliance_hypotenuse, FLANGE_HEIGHT, FLANGE_THICKNESS)
+bpy.ops.transform.translate(
+    value=(-SUPPORT_WIDTH / 2, -FLANGE_HEIGHT - SUPPORT_HEIGHT + SUPPORT_WIDTH, 0)
+)
+boolean(support_0)
+array_offset(compliance_hypotenuse, 0, 0, X_GRID, name="flange_0")
+flanges_collection.objects.link(flange_0)
+
+support_1 = primitive_of_size(SUPPORT_WIDTH, SUPPORT_HEIGHT, THICKNESS)
+x_skew = -X_SIZE * math.cos(math.pi / 2 - compliance_angle) + (
+    (Y_SIZE * (ASYMMETRIC_RATIO + 1) + COMPLIANCE_LENGTH * 2) * Y_GRID
+    - COMPLIANCE_LENGTH
+) * math.cos(compliance_angle)
+x_skew = x_skew % compliance_hypotenuse
+y_skew = X_SIZE * math.sin(math.pi / 2 - compliance_angle) + (
+    (Y_SIZE * (ASYMMETRIC_RATIO + 1) + COMPLIANCE_LENGTH * 2) * Y_GRID
+    - COMPLIANCE_LENGTH
+) * math.sin(compliance_angle)
+bpy.ops.transform.translate(
+    value=(x_skew - SUPPORT_WIDTH / 2, y_skew - SUPPORT_WIDTH, 0)
+)
+flange_1 = primitive_of_size(compliance_hypotenuse, FLANGE_HEIGHT, FLANGE_THICKNESS)
+bpy.ops.transform.translate(
+    value=(x_skew - SUPPORT_WIDTH / 2, y_skew + SUPPORT_HEIGHT - SUPPORT_WIDTH, 0)
+)
+boolean(support_1)
+array_offset(compliance_hypotenuse, 0, 0, X_GRID, name="flange_1")
+flanges_collection.objects.link(flange_1)
+hide(support_0)
+hide(flange_0)
+hide(support_1)
+hide(flange_1)
+
 base_block = primitive_of_size(
     (X_SIZE + COMPLIANCE_LENGTH) * 2,
     Y_SIZE * ASYMMETRIC_RATIO + COMPLIANCE_LENGTH,
@@ -209,12 +270,7 @@ base_block = primitive_of_size(
     origin=(X_SIZE * 2 + COMPLIANCE_LENGTH, 0, 0),
 )
 
-bpy.ops.object.modifier_add(type="BOOLEAN")
-bpy.context.object.modifiers["Boolean"].operand_type = "COLLECTION"
-bpy.context.object.modifiers["Boolean"].operation = "DIFFERENCE"
-bpy.context.object.modifiers["Boolean"].solver = "EXACT"
-bpy.context.object.modifiers["Boolean"].collection = cutout_collection
-bpy.ops.object.modifier_apply(modifier="Boolean")
+boolean(cutout_collection, operation="DIFFERENCE", operand_type="COLLECTION")
 
 array_offset(
     -(X_SIZE + COMPLIANCE_LENGTH) * 2,
@@ -228,24 +284,13 @@ array_offset(
     X_SIZE + COMPLIANCE_LENGTH, Y_SIZE + COMPLIANCE_LENGTH, 0, X_GRID, name="array_x"
 )
 
-compliance_angle = math.atan(w / h)
-compliance_hypotenuse = w / math.sin(compliance_angle)
 bpy.ops.transform.translate(value=(-(X_SIZE * 2 + COMPLIANCE_LENGTH), 0, 0))
 bpy.ops.transform.rotate(value=math.pi / 2 - compliance_angle, orient_axis="Z")
-
-support = primitive_of_size(SUPPORT_WIDTH, SUPPORT_HEIGHT, THICKNESS)
-bpy.ops.transform.translate(
-    value=(-SUPPORT_WIDTH / 2, -SUPPORT_HEIGHT + SUPPORT_WIDTH, 0)
-)
-flange = primitive_of_size(compliance_hypotenuse, FLANGE_HEIGHT, FLANGE_THICKNESS)
-bpy.ops.transform.translate(
-    value=(-SUPPORT_WIDTH / 2, -FLANGE_HEIGHT - SUPPORT_HEIGHT + SUPPORT_WIDTH, 0)
-)
-
-# bpy.ops.transform.rotate(value=-math.pi / 2, orient_axis="X")
-# bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
-# min_x = min([i[0] for i in bpy.context.object.bound_box])
-# bpy.ops.transform.translate(value=(-min_x, 0, 0))
+boolean(flanges_collection, operation="UNION", operand_type="COLLECTION")
+bpy.ops.transform.rotate(value=-math.pi / 2, orient_axis="X")
+bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+min_x = min([i[0] for i in bpy.context.object.bound_box])
+bpy.ops.transform.translate(value=(-min_x, 0, 0))
 
 # circumference = compliance_hypotenuse * X_GRID
 # radius = circumference / (2 * math.pi)
