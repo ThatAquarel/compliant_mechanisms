@@ -14,11 +14,16 @@ def del_collection(coll):
     bpy.data.collections.remove(coll, do_unlink=True)
 
 
+names_filter = ["Light", "Camera", "Point", "Plane"]
+
 try:
     for i in bpy.data.objects:
-        if not i.name in ["Light", "Camera"]:
-            with bpy.context.temp_override(selected_objects=[i]):
-                bpy.ops.object.delete()
+
+        if any(i.name in name for name in names_filter):
+            continue
+
+        with bpy.context.temp_override(selected_objects=[i]):
+            bpy.ops.object.delete()
 
     del_collection(bpy.data.collections[CUTOUTS_COLLECTION])
 except:
@@ -228,26 +233,28 @@ bpy.ops.object.mode_set(mode="EDIT")
 circle_mesh = bpy.context.object.data
 
 bm = bmesh.from_edit_mesh(circle_mesh)
-rip_index = 0
 
-rip_vertex = bm.verts[:][rip_index]
-new_vertex = bm.verts.new(rip_vertex.co)
+connection_vert = bm.verts[:][-1]
+new_verts = [
+    # bm.verts.new((vert.co.x, vert.co.y, vert.co.z + 1))
+    bm.verts.new(vert.co)
+    for vert in bm.verts[:]
+]
+new_verts.append(bm.verts.new(new_verts[0].co))
 bm.verts.index_update()
 
-for i, edge in enumerate(rip_vertex.link_edges[:]):
-    adjacent_vertex = edge.other_vert(rip_vertex)
-    bm.edges.remove(edge)
+bm.edges.remove(bm.edges[:][-1])
+bm.edges.new([connection_vert, new_verts[0]])
+new_edges = [
+    bm.edges.new([vert, new_verts[i + 1]]) for i, vert in enumerate(new_verts[:-1])
+]
+bm.edges.index_update()
 
-    if i % 2 == 0:
-        bm.edges.new([new_vertex, adjacent_vertex])
-    else:
-        bm.edges.new([rip_vertex, adjacent_vertex])
-
-bmesh.update_edit_mesh(circle_mesh)
+bmesh.update_edit_mesh(circle.data)
 
 bpy.ops.object.mode_set(mode="OBJECT")
-# bpy.ops.object.convert(target="CURVE")
+bpy.ops.object.convert(target="CURVE")
 
-# bpy.context.view_layer.objects.active = base_block
-# bpy.ops.object.modifier_add(type="CURVE")
-# bpy.context.object.modifiers["Curve"].object = circle
+bpy.context.view_layer.objects.active = base_block
+bpy.ops.object.modifier_add(type="CURVE")
+bpy.context.object.modifiers["Curve"].object = circle
