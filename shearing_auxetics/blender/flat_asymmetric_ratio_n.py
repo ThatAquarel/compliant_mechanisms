@@ -32,13 +32,14 @@ except:
 # parametric constants
 EPSILON = 1e-5
 CURVE_RESOLUTION = 16
-REMESH_RESOLUTION = 9
+REMESH = True
+REMESH_RESOLUTION = 10
 
 COMPLIANCE_LENGTH = 3
 COMPLIANCE_THICKNESS = 0.6
 COMPLIANCE_FILLET_RADIUS = 1
 
-X_SIZE, Y_SIZE, THICKNESS = 6, 13, 4
+X_SIZE, Y_SIZE, THICKNESS = 6, 15, 4
 X_GRID, Y_GRID = 12, 4
 
 ASYMMETRIC_RATIO = 2
@@ -204,7 +205,9 @@ bpy.context.object.modifiers[array_y].use_constant_offset = True
 bpy.context.object.modifiers[array_y].constant_offset_displace[0] = (
     -(X_SIZE + COMPLIANCE_LENGTH) * 2
 )
-bpy.context.object.modifiers[array_y].constant_offset_displace[1] = Y_SIZE
+bpy.context.object.modifiers[array_y].constant_offset_displace[1] = Y_SIZE * (
+    ASYMMETRIC_RATIO - 1
+)
 bpy.context.object.modifiers[array_y].count = Y_GRID
 bpy.ops.object.modifier_apply(modifier=array_y)
 
@@ -225,16 +228,12 @@ bpy.context.object.modifiers[array_x].count = X_GRID
 bpy.ops.object.modifier_apply(modifier=array_x)
 
 compliance_angle = math.atan(w / h)
-bpy.ops.transform.translate(
-    value=(
-        -(X_SIZE * 2 + COMPLIANCE_LENGTH)
-        + math.sin(compliance_angle) * (X_SIZE * 2 + COMPLIANCE_LENGTH),
-        0,
-        0,
-    )
-)
+bpy.ops.transform.translate(value=(-(X_SIZE * 2 + COMPLIANCE_LENGTH), 0, 0))
 bpy.ops.transform.rotate(value=math.pi / 2 - compliance_angle, orient_axis="Z")
 bpy.ops.transform.rotate(value=-math.pi / 2, orient_axis="X")
+bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+min_x = min([i[0] for i in bpy.context.object.bound_box])
+bpy.ops.transform.translate(value=(-min_x, 0, 0))
 
 compliance_hypotenuse = w / math.sin(compliance_angle)
 circumference = compliance_hypotenuse * X_GRID
@@ -279,10 +278,11 @@ bpy.ops.object.mode_set(mode="OBJECT")
 bpy.ops.object.convert(target="CURVE")
 
 bpy.context.view_layer.objects.active = base_block
-bpy.ops.object.modifier_add(type="REMESH")
-bpy.context.object.modifiers["Remesh"].mode = "SHARP"
-bpy.context.object.modifiers["Remesh"].octree_depth = REMESH_RESOLUTION
-bpy.ops.object.modifier_apply(modifier="Remesh")
+if REMESH:
+    bpy.ops.object.modifier_add(type="REMESH")
+    bpy.context.object.modifiers["Remesh"].mode = "SHARP"
+    bpy.context.object.modifiers["Remesh"].octree_depth = REMESH_RESOLUTION
+    bpy.ops.object.modifier_apply(modifier="Remesh")
 
 bpy.ops.object.modifier_add(type="CURVE")
 bpy.context.object.modifiers["Curve"].object = circle
