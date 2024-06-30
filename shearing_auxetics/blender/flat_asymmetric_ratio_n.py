@@ -85,7 +85,6 @@ def build_cutout(x, y, z, f):
     bm.to_mesh(cutout.data)
     bm.free()
 
-    # cutout.hide_set(True)
     return cutout
 
 
@@ -100,6 +99,7 @@ x_cutout_0 = build_cutout(
 bpy.ops.transform.translate(
     value=(X_SIZE + COMPLIANCE_LENGTH + COMPLIANCE_THICKNESS, Y_SIZE, 0)
 )
+x_cutout_0.hide_set(True)
 cutout_collection.objects.link(x_cutout_0)
 
 x_cutout_1 = build_cutout(
@@ -115,6 +115,7 @@ bpy.ops.transform.translate(
         0,
     )
 )
+x_cutout_1.hide_set(True)
 cutout_collection.objects.link(x_cutout_1)
 
 y_cutout_0 = build_cutout(
@@ -124,6 +125,7 @@ y_cutout_0 = build_cutout(
     COMPLIANCE_FILLET_RADIUS,
 )
 bpy.ops.transform.translate(value=(X_SIZE, COMPLIANCE_THICKNESS, 0))
+y_cutout_0.hide_set(True)
 cutout_collection.objects.link(y_cutout_0)
 
 y_cutout_1 = build_cutout(
@@ -139,6 +141,7 @@ bpy.ops.transform.translate(
         0,
     )
 )
+y_cutout_1.hide_set(True)
 cutout_collection.objects.link(y_cutout_1)
 
 corner_cutout = primitive_of_size(
@@ -147,7 +150,7 @@ corner_cutout = primitive_of_size(
 bpy.ops.transform.translate(
     value=(X_SIZE + COMPLIANCE_LENGTH, Y_SIZE + COMPLIANCE_LENGTH, 0)
 )
-# corner_cutout.hide_set(True)
+corner_cutout.hide_set(True)
 cutout_collection.objects.link(corner_cutout)
 
 base_block = primitive_of_size(
