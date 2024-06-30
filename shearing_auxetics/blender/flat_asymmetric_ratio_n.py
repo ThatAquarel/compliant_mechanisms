@@ -162,7 +162,6 @@ x_cutout_0 = build_cutout(
 bpy.ops.transform.translate(
     value=(X_SIZE + COMPLIANCE_LENGTH + COMPLIANCE_THICKNESS, Y_SIZE, 0)
 )
-# x_cutout_0.hide_set(True)
 hide(x_cutout_0)
 cutout_collection.objects.link(x_cutout_0)
 
@@ -179,7 +178,6 @@ bpy.ops.transform.translate(
         0,
     )
 )
-# x_cutout_1.hide_set(True)
 hide(x_cutout_1)
 cutout_collection.objects.link(x_cutout_1)
 
@@ -190,7 +188,6 @@ y_cutout_0 = build_cutout(
     COMPLIANCE_FILLET_RADIUS,
 )
 bpy.ops.transform.translate(value=(X_SIZE, COMPLIANCE_THICKNESS, 0))
-# y_cutout_0.hide_set(True)
 hide(y_cutout_0)
 cutout_collection.objects.link(y_cutout_0)
 
@@ -207,7 +204,6 @@ bpy.ops.transform.translate(
         0,
     )
 )
-# y_cutout_1.hide_set(True)
 hide(y_cutout_1)
 cutout_collection.objects.link(y_cutout_1)
 
@@ -217,7 +213,6 @@ corner_cutout = primitive_of_size(
 bpy.ops.transform.translate(
     value=(X_SIZE + COMPLIANCE_LENGTH, Y_SIZE + COMPLIANCE_LENGTH, 0)
 )
-# corner_cutout.hide_set(True)
 hide(corner_cutout)
 cutout_collection.objects.link(corner_cutout)
 
@@ -292,53 +287,53 @@ bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
 min_x = min([i[0] for i in bpy.context.object.bound_box])
 bpy.ops.transform.translate(value=(-min_x, 0, 0))
 
-# circumference = compliance_hypotenuse * X_GRID
-# radius = circumference / (2 * math.pi)
+circumference = compliance_hypotenuse * X_GRID
+radius = circumference / (2 * math.pi)
 
-# bpy.ops.mesh.primitive_circle_add(
-#     radius=radius,
-#     enter_editmode=False,
-#     align="WORLD",
-#     location=(0, -radius, 0),
-#     scale=(1, 1, 1),
-#     vertices=(X_GRID * CURVE_RESOLUTION),
-# )
-# circle = bpy.context.object
-# bpy.context.scene.cursor.location = [0, -THICKNESS, 0]
-# bpy.ops.object.origin_set(type="ORIGIN_CURSOR")
+bpy.ops.mesh.primitive_circle_add(
+    radius=radius,
+    enter_editmode=False,
+    align="WORLD",
+    location=(0, -radius, 0),
+    scale=(1, 1, 1),
+    vertices=(X_GRID * CURVE_RESOLUTION),
+)
+circle = bpy.context.object
+bpy.context.scene.cursor.location = [0, -THICKNESS, 0]
+bpy.ops.object.origin_set(type="ORIGIN_CURSOR")
 
-# bpy.ops.object.mode_set(mode="EDIT")
-# circle_mesh = bpy.context.object.data
+bpy.ops.object.mode_set(mode="EDIT")
+circle_mesh = bpy.context.object.data
 
-# bm = bmesh.from_edit_mesh(circle_mesh)
+bm = bmesh.from_edit_mesh(circle_mesh)
 
-# connection_vert = bm.verts[:][-1]
-# new_verts = [
-#     # bm.verts.new((vert.co.x, vert.co.y, vert.co.z + 1))
-#     bm.verts.new(vert.co)
-#     for vert in bm.verts[:]
-# ]
-# new_verts.append(bm.verts.new(new_verts[0].co))
-# bm.verts.index_update()
+connection_vert = bm.verts[:][-1]
+new_verts = [
+    # bm.verts.new((vert.co.x, vert.co.y, vert.co.z + 1))
+    bm.verts.new(vert.co)
+    for vert in bm.verts[:]
+]
+new_verts.append(bm.verts.new(new_verts[0].co))
+bm.verts.index_update()
 
-# bm.edges.remove(bm.edges[:][-1])
-# bm.edges.new([connection_vert, new_verts[0]])
-# new_edges = [
-#     bm.edges.new([vert, new_verts[i + 1]]) for i, vert in enumerate(new_verts[:-1])
-# ]
-# bm.edges.index_update()
+bm.edges.remove(bm.edges[:][-1])
+bm.edges.new([connection_vert, new_verts[0]])
+new_edges = [
+    bm.edges.new([vert, new_verts[i + 1]]) for i, vert in enumerate(new_verts[:-1])
+]
+bm.edges.index_update()
 
-# bmesh.update_edit_mesh(circle.data)
+bmesh.update_edit_mesh(circle.data)
 
-# bpy.ops.object.mode_set(mode="OBJECT")
-# bpy.ops.object.convert(target="CURVE")
+bpy.ops.object.mode_set(mode="OBJECT")
+bpy.ops.object.convert(target="CURVE")
 
-# bpy.context.view_layer.objects.active = base_block
-# if REMESH:
-#     bpy.ops.object.modifier_add(type="REMESH")
-#     bpy.context.object.modifiers["Remesh"].mode = "SHARP"
-#     bpy.context.object.modifiers["Remesh"].octree_depth = REMESH_RESOLUTION
-#     bpy.ops.object.modifier_apply(modifier="Remesh")
+bpy.context.view_layer.objects.active = base_block
+if REMESH:
+    bpy.ops.object.modifier_add(type="REMESH")
+    bpy.context.object.modifiers["Remesh"].mode = "SHARP"
+    bpy.context.object.modifiers["Remesh"].octree_depth = REMESH_RESOLUTION
+    bpy.ops.object.modifier_apply(modifier="Remesh")
 
-# bpy.ops.object.modifier_add(type="CURVE")
-# bpy.context.object.modifiers["Curve"].object = circle
+bpy.ops.object.modifier_add(type="CURVE")
+bpy.context.object.modifiers["Curve"].object = circle
