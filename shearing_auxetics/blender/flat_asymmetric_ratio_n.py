@@ -44,6 +44,9 @@ X_GRID, Y_GRID = 12, 4
 
 ASYMMETRIC_RATIO = 3
 
+SUPPORT_WIDTH, SUPPORT_HEIGHT = COMPLIANCE_THICKNESS, COMPLIANCE_LENGTH
+FLANGE_HEIGHT, FLANGE_THICKNESS = 10, 5
+
 w, h, rh = (
     X_SIZE + COMPLIANCE_LENGTH,
     Y_SIZE + COMPLIANCE_LENGTH,
@@ -109,6 +112,24 @@ def build_cutout(x, y, z, f):
     bm.free()
 
     return cutout
+
+
+def array_offset(
+    x,
+    y,
+    z,
+    n,
+    name="Array",
+):
+    bpy.ops.object.modifier_add(type="ARRAY")
+    mod = bpy.context.object.modifiers.get("Array")
+    if mod:
+        mod.name = name
+    bpy.context.object.modifiers[name].use_relative_offset = False
+    bpy.context.object.modifiers[name].use_constant_offset = True
+    bpy.context.object.modifiers[name].constant_offset_displace = (x, y, z)
+    bpy.context.object.modifiers[name].count = n
+    bpy.ops.object.modifier_apply(modifier=name)
 
 
 cutout_collection = bpy.data.collections.new(CUTOUTS_COLLECTION)
@@ -195,94 +216,84 @@ bpy.context.object.modifiers["Boolean"].solver = "EXACT"
 bpy.context.object.modifiers["Boolean"].collection = cutout_collection
 bpy.ops.object.modifier_apply(modifier="Boolean")
 
-array_y = "array_y"
-bpy.ops.object.modifier_add(type="ARRAY")
-mod = bpy.context.object.modifiers.get("Array")
-if mod:
-    mod.name = array_y
-bpy.context.object.modifiers[array_y].use_relative_offset = False
-bpy.context.object.modifiers[array_y].use_constant_offset = True
-bpy.context.object.modifiers[array_y].constant_offset_displace[0] = (
-    -(X_SIZE + COMPLIANCE_LENGTH) * 2
+array_offset(
+    -(X_SIZE + COMPLIANCE_LENGTH) * 2,
+    Y_SIZE * (ASYMMETRIC_RATIO - 1),
+    0,
+    Y_GRID,
+    name="array_y",
 )
-bpy.context.object.modifiers[array_y].constant_offset_displace[1] = Y_SIZE * (
-    ASYMMETRIC_RATIO - 1
-)
-bpy.context.object.modifiers[array_y].count = Y_GRID
-bpy.ops.object.modifier_apply(modifier=array_y)
 
-array_x = "array_x"
-bpy.ops.object.modifier_add(type="ARRAY")
-mod = bpy.context.object.modifiers.get("Array")
-if mod:
-    mod.name = array_x
-bpy.context.object.modifiers[array_x].use_relative_offset = False
-bpy.context.object.modifiers[array_x].use_constant_offset = True
-bpy.context.object.modifiers[array_x].constant_offset_displace[0] = (
-    X_SIZE + COMPLIANCE_LENGTH
+array_offset(
+    X_SIZE + COMPLIANCE_LENGTH, Y_SIZE + COMPLIANCE_LENGTH, 0, X_GRID, name="array_x"
 )
-bpy.context.object.modifiers[array_x].constant_offset_displace[1] = (
-    Y_SIZE + COMPLIANCE_LENGTH
-)
-bpy.context.object.modifiers[array_x].count = X_GRID
-bpy.ops.object.modifier_apply(modifier=array_x)
 
 compliance_angle = math.atan(w / h)
+compliance_hypotenuse = w / math.sin(compliance_angle)
 bpy.ops.transform.translate(value=(-(X_SIZE * 2 + COMPLIANCE_LENGTH), 0, 0))
 bpy.ops.transform.rotate(value=math.pi / 2 - compliance_angle, orient_axis="Z")
-bpy.ops.transform.rotate(value=-math.pi / 2, orient_axis="X")
-bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
-min_x = min([i[0] for i in bpy.context.object.bound_box])
-bpy.ops.transform.translate(value=(-min_x, 0, 0))
 
-compliance_hypotenuse = w / math.sin(compliance_angle)
-circumference = compliance_hypotenuse * X_GRID
-radius = circumference / (2 * math.pi)
-
-bpy.ops.mesh.primitive_circle_add(
-    radius=radius,
-    enter_editmode=False,
-    align="WORLD",
-    location=(0, -radius, 0),
-    scale=(1, 1, 1),
-    vertices=(X_GRID * CURVE_RESOLUTION),
+support = primitive_of_size(SUPPORT_WIDTH, SUPPORT_HEIGHT, THICKNESS)
+bpy.ops.transform.translate(
+    value=(-SUPPORT_WIDTH / 2, -SUPPORT_HEIGHT + SUPPORT_WIDTH, 0)
 )
-circle = bpy.context.object
-bpy.context.scene.cursor.location = [0, -THICKNESS, 0]
-bpy.ops.object.origin_set(type="ORIGIN_CURSOR")
+flange = primitive_of_size(compliance_hypotenuse, FLANGE_HEIGHT, FLANGE_THICKNESS)
+bpy.ops.transform.translate(
+    value=(-SUPPORT_WIDTH / 2, -FLANGE_HEIGHT - SUPPORT_HEIGHT + SUPPORT_WIDTH, 0)
+)
 
-bpy.ops.object.mode_set(mode="EDIT")
-circle_mesh = bpy.context.object.data
+# bpy.ops.transform.rotate(value=-math.pi / 2, orient_axis="X")
+# bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+# min_x = min([i[0] for i in bpy.context.object.bound_box])
+# bpy.ops.transform.translate(value=(-min_x, 0, 0))
 
-bm = bmesh.from_edit_mesh(circle_mesh)
+# circumference = compliance_hypotenuse * X_GRID
+# radius = circumference / (2 * math.pi)
 
-connection_vert = bm.verts[:][-1]
-new_verts = [
-    # bm.verts.new((vert.co.x, vert.co.y, vert.co.z + 1))
-    bm.verts.new(vert.co)
-    for vert in bm.verts[:]
-]
-new_verts.append(bm.verts.new(new_verts[0].co))
-bm.verts.index_update()
+# bpy.ops.mesh.primitive_circle_add(
+#     radius=radius,
+#     enter_editmode=False,
+#     align="WORLD",
+#     location=(0, -radius, 0),
+#     scale=(1, 1, 1),
+#     vertices=(X_GRID * CURVE_RESOLUTION),
+# )
+# circle = bpy.context.object
+# bpy.context.scene.cursor.location = [0, -THICKNESS, 0]
+# bpy.ops.object.origin_set(type="ORIGIN_CURSOR")
 
-bm.edges.remove(bm.edges[:][-1])
-bm.edges.new([connection_vert, new_verts[0]])
-new_edges = [
-    bm.edges.new([vert, new_verts[i + 1]]) for i, vert in enumerate(new_verts[:-1])
-]
-bm.edges.index_update()
+# bpy.ops.object.mode_set(mode="EDIT")
+# circle_mesh = bpy.context.object.data
 
-bmesh.update_edit_mesh(circle.data)
+# bm = bmesh.from_edit_mesh(circle_mesh)
 
-bpy.ops.object.mode_set(mode="OBJECT")
-bpy.ops.object.convert(target="CURVE")
+# connection_vert = bm.verts[:][-1]
+# new_verts = [
+#     # bm.verts.new((vert.co.x, vert.co.y, vert.co.z + 1))
+#     bm.verts.new(vert.co)
+#     for vert in bm.verts[:]
+# ]
+# new_verts.append(bm.verts.new(new_verts[0].co))
+# bm.verts.index_update()
 
-bpy.context.view_layer.objects.active = base_block
-if REMESH:
-    bpy.ops.object.modifier_add(type="REMESH")
-    bpy.context.object.modifiers["Remesh"].mode = "SHARP"
-    bpy.context.object.modifiers["Remesh"].octree_depth = REMESH_RESOLUTION
-    bpy.ops.object.modifier_apply(modifier="Remesh")
+# bm.edges.remove(bm.edges[:][-1])
+# bm.edges.new([connection_vert, new_verts[0]])
+# new_edges = [
+#     bm.edges.new([vert, new_verts[i + 1]]) for i, vert in enumerate(new_verts[:-1])
+# ]
+# bm.edges.index_update()
 
-bpy.ops.object.modifier_add(type="CURVE")
-bpy.context.object.modifiers["Curve"].object = circle
+# bmesh.update_edit_mesh(circle.data)
+
+# bpy.ops.object.mode_set(mode="OBJECT")
+# bpy.ops.object.convert(target="CURVE")
+
+# bpy.context.view_layer.objects.active = base_block
+# if REMESH:
+#     bpy.ops.object.modifier_add(type="REMESH")
+#     bpy.context.object.modifiers["Remesh"].mode = "SHARP"
+#     bpy.context.object.modifiers["Remesh"].octree_depth = REMESH_RESOLUTION
+#     bpy.ops.object.modifier_apply(modifier="Remesh")
+
+# bpy.ops.object.modifier_add(type="CURVE")
+# bpy.context.object.modifiers["Curve"].object = circle
