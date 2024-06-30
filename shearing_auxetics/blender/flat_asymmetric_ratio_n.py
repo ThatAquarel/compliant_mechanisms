@@ -1,10 +1,24 @@
 import bpy
-import numpy as np
+import bmesh
 
+# clear old objects
 for i in bpy.context.scene.objects:
     if not i.name in ["Light", "Camera"]:
         with bpy.context.temp_override(selected_objects=[i]):
             bpy.ops.object.delete()
+
+
+def del_collection(coll):
+    for c in coll.children:
+        del_collection(c)
+    bpy.data.collections.remove(coll, do_unlink=True)
+
+
+del_collection(bpy.data.collections["Cutouts"])
+
+# parametric constants
+EPSILON = 1e-5
+CURVE_RESOLUTION = 8
 
 COMPLIANCE_LENGTH = 3
 COMPLIANCE_THICKNESS = 0.6
@@ -22,21 +36,128 @@ w, h, rh = (
 )
 
 
-base_size = np.array(
-    [
-        (X_SIZE + COMPLIANCE_LENGTH) * 2,
-        Y_SIZE * ASYMMETRIC_RATIO + COMPLIANCE_LENGTH,
-        THICKNESS,
-    ]
-)
-bpy.ops.mesh.primitive_cube_add(
-    size=1,
-    enter_editmode=False,
-    location=base_size / 2,
-    scale=base_size,
-)
-bpy.context.scene.cursor.location = [0, 0, 0]
-bpy.ops.object.origin_set(type="ORIGIN_CURSOR")
-bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+def primitive_of_size(x, y, z):
+    bpy.ops.mesh.primitive_cube_add(
+        size=1,
+        enter_editmode=False,
+        location=(x / 2, y / 2, z / 2),
+        scale=(x, y, z),
+    )
+    bpy.context.scene.cursor.location = [0, 0, 0]
+    bpy.ops.object.origin_set(type="ORIGIN_CURSOR")
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
 
-base_block = bpy.context.object
+    return bpy.context.object
+    # return bpy.context.active_object
+
+
+def build_cutout(x, y, z, f):
+    cutout = primitive_of_size(x, y, z)
+
+    bm = bmesh.new()
+    bm.from_mesh(cutout.data)
+
+    def select_fillet(edge):
+        dx, dy = 0, 0
+
+        for i, vert in enumerate(edge.verts):
+            if i % 2 == 0:
+                dx += vert.co.x
+                dy += vert.co.y
+            else:
+                dx -= vert.co.x
+                dy -= vert.co.y
+
+        return -EPSILON <= dx <= EPSILON and -EPSILON <= dy <= EPSILON
+
+    bevel_geom = [edge for edge in bm.edges if select_fillet(edge)]
+
+    ret = bmesh.ops.bevel(
+        bm,
+        geom=bevel_geom,
+        offset=f,
+        segments=CURVE_RESOLUTION,
+        profile=0.5,
+        affect="EDGES",
+    )
+    del ret
+
+    bm.to_mesh(cutout.data)
+    bm.free()
+
+    # cutout.hide_set(True)
+    return cutout
+
+
+cutout_collection = bpy.data.collections.new("Cutouts")
+
+x_cutout_0 = build_cutout(
+    (X_SIZE - COMPLIANCE_THICKNESS) * 2 + COMPLIANCE_LENGTH,
+    COMPLIANCE_LENGTH,
+    THICKNESS,
+    COMPLIANCE_FILLET_RADIUS,
+)
+bpy.ops.transform.translate(
+    value=(X_SIZE + COMPLIANCE_LENGTH + COMPLIANCE_THICKNESS, Y_SIZE, 0)
+)
+cutout_collection.objects.link(x_cutout_0)
+
+x_cutout_1 = build_cutout(
+    (X_SIZE - COMPLIANCE_THICKNESS) * 2 + COMPLIANCE_LENGTH,
+    COMPLIANCE_LENGTH,
+    THICKNESS,
+    COMPLIANCE_FILLET_RADIUS,
+)
+bpy.ops.transform.translate(
+    value=(
+        -X_SIZE - COMPLIANCE_LENGTH + COMPLIANCE_THICKNESS,
+        Y_SIZE * ASYMMETRIC_RATIO,
+        0,
+    )
+)
+cutout_collection.objects.link(x_cutout_1)
+
+y_cutout_0 = build_cutout(
+    COMPLIANCE_LENGTH,
+    Y_SIZE * (ASYMMETRIC_RATIO + 1) + COMPLIANCE_LENGTH - COMPLIANCE_THICKNESS * 2,
+    THICKNESS,
+    COMPLIANCE_FILLET_RADIUS,
+)
+bpy.ops.transform.translate(value=(X_SIZE, COMPLIANCE_THICKNESS, 0))
+cutout_collection.objects.link(y_cutout_0)
+
+y_cutout_1 = build_cutout(
+    COMPLIANCE_LENGTH,
+    Y_SIZE * (ASYMMETRIC_RATIO + 1) + COMPLIANCE_LENGTH - COMPLIANCE_THICKNESS * 2,
+    THICKNESS,
+    COMPLIANCE_FILLET_RADIUS,
+)
+bpy.ops.transform.translate(
+    value=(
+        X_SIZE * 2 + COMPLIANCE_LENGTH,
+        -COMPLIANCE_LENGTH - Y_SIZE * ASYMMETRIC_RATIO + COMPLIANCE_THICKNESS,
+        0,
+    )
+)
+cutout_collection.objects.link(y_cutout_1)
+
+corner_cutout = primitive_of_size(
+    X_SIZE + COMPLIANCE_LENGTH, Y_SIZE * (ASYMMETRIC_RATIO - 1), THICKNESS
+)
+bpy.ops.transform.translate(
+    value=(X_SIZE + COMPLIANCE_LENGTH, Y_SIZE + COMPLIANCE_LENGTH, 0)
+)
+# corner_cutout.hide_set(True)
+cutout_collection.objects.link(corner_cutout)
+
+base_block = primitive_of_size(
+    (X_SIZE + COMPLIANCE_LENGTH) * 2,
+    Y_SIZE * ASYMMETRIC_RATIO + COMPLIANCE_LENGTH,
+    THICKNESS,
+)
+
+bpy.ops.object.modifier_add(type="BOOLEAN")
+bpy.context.object.modifiers["Boolean"].operand_type = "COLLECTION"
+bpy.context.object.modifiers["Boolean"].operation = "DIFFERENCE"
+bpy.context.object.modifiers["Boolean"].solver = "EXACT"
+bpy.context.object.modifiers["Boolean"].collection = cutout_collection
