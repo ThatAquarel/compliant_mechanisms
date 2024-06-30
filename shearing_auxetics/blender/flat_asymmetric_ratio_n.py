@@ -217,9 +217,15 @@ bpy.context.object.modifiers[array_x].constant_offset_displace[1] = 18
 bpy.context.object.modifiers[array_x].count = X_GRID
 bpy.ops.object.modifier_apply(modifier=array_x)
 
-bpy.ops.transform.translate(value=(-(X_SIZE * 2 + COMPLIANCE_LENGTH), 0, 0))
-
 compliance_angle = math.atan(w / h)
+bpy.ops.transform.translate(
+    value=(
+        -(X_SIZE * 2 + COMPLIANCE_LENGTH)
+        + math.sin(compliance_angle) * (X_SIZE * 2 + COMPLIANCE_LENGTH),
+        0,
+        0,
+    )
+)
 bpy.ops.transform.rotate(value=math.pi / 2 - compliance_angle, orient_axis="Z")
 bpy.ops.transform.rotate(value=-math.pi / 2, orient_axis="X")
 
