@@ -5,11 +5,6 @@ import math
 # clear old objects
 CUTOUTS_COLLECTION = "Cutouts"
 
-for i in bpy.context.scene.objects:
-    if not i.name in ["Light", "Camera"]:
-        with bpy.context.temp_override(selected_objects=[i]):
-            bpy.ops.object.delete()
-
 
 def del_collection(coll):
     for c in coll.children:
@@ -17,7 +12,15 @@ def del_collection(coll):
     bpy.data.collections.remove(coll, do_unlink=True)
 
 
-del_collection(bpy.data.collections[CUTOUTS_COLLECTION])
+try:
+    for i in bpy.data.objects:
+        if not i.name in ["Light", "Camera"]:
+            with bpy.context.temp_override(selected_objects=[i]):
+                bpy.ops.object.delete()
+
+    del_collection(bpy.data.collections[CUTOUTS_COLLECTION])
+except:
+    pass
 
 # parametric constants
 EPSILON = 1e-5
@@ -38,17 +41,15 @@ w, h, rh = (
     Y_SIZE * ASYMMETRIC_RATIO + COMPLIANCE_LENGTH,
 )
 
-compliance_angle = math.atan(w / h)
 
-
-def primitive_of_size(x, y, z):
+def primitive_of_size(x, y, z, origin=[0, 0, 0]):
     bpy.ops.mesh.primitive_cube_add(
         size=1,
         enter_editmode=False,
         location=(x / 2, y / 2, z / 2),
         scale=(x, y, z),
     )
-    bpy.context.scene.cursor.location = [0, 0, 0]
+    bpy.context.scene.cursor.location = origin
     bpy.ops.object.origin_set(type="ORIGIN_CURSOR")
     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
 
@@ -162,6 +163,7 @@ base_block = primitive_of_size(
     (X_SIZE + COMPLIANCE_LENGTH) * 2,
     Y_SIZE * ASYMMETRIC_RATIO + COMPLIANCE_LENGTH,
     THICKNESS,
+    origin=(X_SIZE * 2 + COMPLIANCE_LENGTH, 0, 0),
 )
 
 bpy.ops.object.modifier_add(type="BOOLEAN")
@@ -194,3 +196,6 @@ bpy.context.object.modifiers[array_x].constant_offset_displace[0] = 9
 bpy.context.object.modifiers[array_x].constant_offset_displace[1] = 18
 bpy.context.object.modifiers[array_x].count = X_GRID
 bpy.ops.object.modifier_apply(modifier=array_x)
+
+bpy.ops.transform.translate(value=(-(X_SIZE * 2 + COMPLIANCE_LENGTH), 0, 0))
+bpy.ops.transform.rotate(value=math.pi / 2 - math.atan(w / h), orient_axis="Z")
