@@ -32,13 +32,14 @@ except:
 # parametric constants
 EPSILON = 1e-5
 CURVE_RESOLUTION = 16
+REMESH_RESOLUTION = 9
 
 COMPLIANCE_LENGTH = 3
 COMPLIANCE_THICKNESS = 0.6
 COMPLIANCE_FILLET_RADIUS = 1
 
-X_SIZE, Y_SIZE, THICKNESS = 6, 15, 4
-X_GRID, Y_GRID = 8, 5
+X_SIZE, Y_SIZE, THICKNESS = 6, 13, 4
+X_GRID, Y_GRID = 12, 4
 
 ASYMMETRIC_RATIO = 2
 
@@ -200,8 +201,10 @@ if mod:
     mod.name = array_y
 bpy.context.object.modifiers[array_y].use_relative_offset = False
 bpy.context.object.modifiers[array_y].use_constant_offset = True
-bpy.context.object.modifiers[array_y].constant_offset_displace[0] = -18
-bpy.context.object.modifiers[array_y].constant_offset_displace[1] = 15
+bpy.context.object.modifiers[array_y].constant_offset_displace[0] = (
+    -(X_SIZE + COMPLIANCE_LENGTH) * 2
+)
+bpy.context.object.modifiers[array_y].constant_offset_displace[1] = Y_SIZE
 bpy.context.object.modifiers[array_y].count = Y_GRID
 bpy.ops.object.modifier_apply(modifier=array_y)
 
@@ -212,8 +215,12 @@ if mod:
     mod.name = array_x
 bpy.context.object.modifiers[array_x].use_relative_offset = False
 bpy.context.object.modifiers[array_x].use_constant_offset = True
-bpy.context.object.modifiers[array_x].constant_offset_displace[0] = 9
-bpy.context.object.modifiers[array_x].constant_offset_displace[1] = 18
+bpy.context.object.modifiers[array_x].constant_offset_displace[0] = (
+    X_SIZE + COMPLIANCE_LENGTH
+)
+bpy.context.object.modifiers[array_x].constant_offset_displace[1] = (
+    Y_SIZE + COMPLIANCE_LENGTH
+)
 bpy.context.object.modifiers[array_x].count = X_GRID
 bpy.ops.object.modifier_apply(modifier=array_x)
 
@@ -274,7 +281,7 @@ bpy.ops.object.convert(target="CURVE")
 bpy.context.view_layer.objects.active = base_block
 bpy.ops.object.modifier_add(type="REMESH")
 bpy.context.object.modifiers["Remesh"].mode = "SHARP"
-bpy.context.object.modifiers["Remesh"].octree_depth = 9
+bpy.context.object.modifiers["Remesh"].octree_depth = REMESH_RESOLUTION
 bpy.ops.object.modifier_apply(modifier="Remesh")
 
 bpy.ops.object.modifier_add(type="CURVE")
