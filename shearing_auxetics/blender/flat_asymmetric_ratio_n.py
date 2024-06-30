@@ -60,7 +60,6 @@ def primitive_of_size(x, y, z, origin=[0, 0, 0]):
     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
 
     return bpy.context.object
-    # return bpy.context.active_object
 
 
 def build_cutout(x, y, z, f):
@@ -221,11 +220,14 @@ bpy.ops.mesh.primitive_circle_add(
     scale=(1, 1, 1),
     vertices=(X_GRID * CURVE_RESOLUTION),
 )
+circle = bpy.context.object
+bpy.context.scene.cursor.location = [0, 0, 0]
+bpy.ops.object.origin_set(type="ORIGIN_CURSOR")
 
 bpy.ops.object.mode_set(mode="EDIT")
-circle = bpy.context.object.data
+circle_mesh = bpy.context.object.data
 
-bm = bmesh.from_edit_mesh(circle)
+bm = bmesh.from_edit_mesh(circle_mesh)
 rip_index = 0
 
 rip_vertex = bm.verts[:][rip_index]
@@ -241,6 +243,11 @@ for i, edge in enumerate(rip_vertex.link_edges[:]):
     else:
         bm.edges.new([rip_vertex, adjacent_vertex])
 
-bmesh.update_edit_mesh(circle)
+bmesh.update_edit_mesh(circle_mesh)
 
 bpy.ops.object.mode_set(mode="OBJECT")
+# bpy.ops.object.convert(target="CURVE")
+
+# bpy.context.view_layer.objects.active = base_block
+# bpy.ops.object.modifier_add(type="CURVE")
+# bpy.context.object.modifiers["Curve"].object = circle
