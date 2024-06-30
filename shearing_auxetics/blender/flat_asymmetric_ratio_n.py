@@ -1,7 +1,10 @@
 import bpy
 import bmesh
+import math
 
 # clear old objects
+CUTOUTS_COLLECTION = "Cutouts"
+
 for i in bpy.context.scene.objects:
     if not i.name in ["Light", "Camera"]:
         with bpy.context.temp_override(selected_objects=[i]):
@@ -14,7 +17,7 @@ def del_collection(coll):
     bpy.data.collections.remove(coll, do_unlink=True)
 
 
-del_collection(bpy.data.collections["Cutouts"])
+del_collection(bpy.data.collections[CUTOUTS_COLLECTION])
 
 # parametric constants
 EPSILON = 1e-5
@@ -34,6 +37,8 @@ w, h, rh = (
     Y_SIZE + COMPLIANCE_LENGTH,
     Y_SIZE * ASYMMETRIC_RATIO + COMPLIANCE_LENGTH,
 )
+
+compliance_angle = math.atan(w / h)
 
 
 def primitive_of_size(x, y, z):
@@ -88,7 +93,7 @@ def build_cutout(x, y, z, f):
     return cutout
 
 
-cutout_collection = bpy.data.collections.new("Cutouts")
+cutout_collection = bpy.data.collections.new(CUTOUTS_COLLECTION)
 
 x_cutout_0 = build_cutout(
     (X_SIZE - COMPLIANCE_THICKNESS) * 2 + COMPLIANCE_LENGTH,
@@ -164,3 +169,28 @@ bpy.context.object.modifiers["Boolean"].operand_type = "COLLECTION"
 bpy.context.object.modifiers["Boolean"].operation = "DIFFERENCE"
 bpy.context.object.modifiers["Boolean"].solver = "EXACT"
 bpy.context.object.modifiers["Boolean"].collection = cutout_collection
+bpy.ops.object.modifier_apply(modifier="Boolean")
+
+array_y = "array_y"
+bpy.ops.object.modifier_add(type="ARRAY")
+mod = bpy.context.object.modifiers.get("Array")
+if mod:
+    mod.name = array_y
+bpy.context.object.modifiers[array_y].use_relative_offset = False
+bpy.context.object.modifiers[array_y].use_constant_offset = True
+bpy.context.object.modifiers[array_y].constant_offset_displace[0] = -18
+bpy.context.object.modifiers[array_y].constant_offset_displace[1] = 15
+bpy.context.object.modifiers[array_y].count = Y_GRID
+bpy.ops.object.modifier_apply(modifier=array_y)
+
+array_x = "array_x"
+bpy.ops.object.modifier_add(type="ARRAY")
+mod = bpy.context.object.modifiers.get("Array")
+if mod:
+    mod.name = array_x
+bpy.context.object.modifiers[array_x].use_relative_offset = False
+bpy.context.object.modifiers[array_x].use_constant_offset = True
+bpy.context.object.modifiers[array_x].constant_offset_displace[0] = 9
+bpy.context.object.modifiers[array_x].constant_offset_displace[1] = 18
+bpy.context.object.modifiers[array_x].count = X_GRID
+bpy.ops.object.modifier_apply(modifier=array_x)
