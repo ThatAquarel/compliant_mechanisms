@@ -3,6 +3,8 @@ import bmesh
 import math
 
 # clear old objects
+bpy.ops.object.mode_set(mode="OBJECT")
+
 CUTOUTS_COLLECTION = "Cutouts"
 
 
@@ -24,7 +26,7 @@ except:
 
 # parametric constants
 EPSILON = 1e-5
-CURVE_RESOLUTION = 8
+CURVE_RESOLUTION = 16
 
 COMPLIANCE_LENGTH = 3
 COMPLIANCE_THICKNESS = 0.6
@@ -40,6 +42,10 @@ w, h, rh = (
     Y_SIZE + COMPLIANCE_LENGTH,
     Y_SIZE * ASYMMETRIC_RATIO + COMPLIANCE_LENGTH,
 )
+
+
+def is_similar(a, b):
+    return (a - EPSILON) <= b <= (a + EPSILON)
 
 
 def primitive_of_size(x, y, z, origin=[0, 0, 0]):
@@ -74,7 +80,7 @@ def build_cutout(x, y, z, f):
                 dx -= vert.co.x
                 dy -= vert.co.y
 
-        return -EPSILON <= dx <= EPSILON and -EPSILON <= dy <= EPSILON
+        return is_similar(0, dx) and is_similar(0, dy)
 
     bevel_geom = [edge for edge in bm.edges if select_fillet(edge)]
 
@@ -198,4 +204,43 @@ bpy.context.object.modifiers[array_x].count = X_GRID
 bpy.ops.object.modifier_apply(modifier=array_x)
 
 bpy.ops.transform.translate(value=(-(X_SIZE * 2 + COMPLIANCE_LENGTH), 0, 0))
-bpy.ops.transform.rotate(value=math.pi / 2 - math.atan(w / h), orient_axis="Z")
+
+compliance_angle = math.atan(w / h)
+bpy.ops.transform.rotate(value=math.pi / 2 - compliance_angle, orient_axis="Z")
+bpy.ops.transform.rotate(value=-math.pi / 2, orient_axis="X")
+
+compliance_hypotenuse = w / math.sin(compliance_angle)
+circumference = compliance_hypotenuse * X_GRID
+radius = circumference / (2 * math.pi)
+
+bpy.ops.mesh.primitive_circle_add(
+    radius=radius,
+    enter_editmode=False,
+    align="WORLD",
+    location=(0, -radius, 0),
+    scale=(1, 1, 1),
+    vertices=(X_GRID * CURVE_RESOLUTION),
+)
+
+bpy.ops.object.mode_set(mode="EDIT")
+circle = bpy.context.object.data
+
+bm = bmesh.from_edit_mesh(circle)
+rip_index = 0
+
+rip_vertex = bm.verts[:][rip_index]
+new_vertex = bm.verts.new(rip_vertex.co)
+bm.verts.index_update()
+
+for i, edge in enumerate(rip_vertex.link_edges[:]):
+    adjacent_vertex = edge.other_vert(rip_vertex)
+    bm.edges.remove(edge)
+
+    if i % 2 == 0:
+        bm.edges.new([new_vertex, adjacent_vertex])
+    else:
+        bm.edges.new([rip_vertex, adjacent_vertex])
+
+bmesh.update_edit_mesh(circle)
+
+bpy.ops.object.mode_set(mode="OBJECT")
