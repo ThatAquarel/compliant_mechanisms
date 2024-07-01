@@ -48,7 +48,7 @@ X_GRID, Y_GRID = 12, 3
 
 ASYMMETRIC_RATIO = 3
 
-SUPPORT_WIDTH, SUPPORT_HEIGHT = COMPLIANCE_THICKNESS, COMPLIANCE_LENGTH
+SUPPORT_WIDTH, SUPPORT_HEIGHT = COMPLIANCE_THICKNESS, 1
 FLANGE_HEIGHT, FLANGE_THICKNESS = 7, 5
 
 w, h, rh = (
@@ -238,7 +238,8 @@ x_skew = -X_SIZE * math.cos(math.pi / 2 - compliance_angle) + (
     (Y_SIZE * (ASYMMETRIC_RATIO + 1) + COMPLIANCE_LENGTH * 2) * Y_GRID
     - COMPLIANCE_LENGTH
 ) * math.cos(compliance_angle)
-x_skew = x_skew % compliance_hypotenuse
+# x_skew = x_skew % compliance_hypotenuse # put flange closest to axis
+x_skew -= ((Y_GRID * 2) - 1) * compliance_hypotenuse
 y_skew = X_SIZE * math.sin(math.pi / 2 - compliance_angle) + (
     (Y_SIZE * (ASYMMETRIC_RATIO + 1) + COMPLIANCE_LENGTH * 2) * Y_GRID
     - COMPLIANCE_LENGTH
