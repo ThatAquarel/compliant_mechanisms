@@ -36,7 +36,7 @@ def main():
         imgui.end()
 
         # Clear the screen
-        glClearColor(0.45, 0.55, 0.60, 1.00)
+        glClearColor(0.16, 0.16, 0.16, 1.00)
         glClear(GL_COLOR_BUFFER_BIT)
 
         # Render ImGui
