@@ -147,21 +147,26 @@ def array_offset(
     bpy.ops.object.modifier_apply(modifier=name)
 
 
-def boolean(
-    x, operation="UNION", operand_type="OBJECT", name="Boolean", solver="EXACT"
-):
+def boolean(x, operation="UNION", operand_type="OBJECT", name="Boolean"):
     bpy.ops.object.modifier_add(type="BOOLEAN")
     mod = bpy.context.object.modifiers.get("Boolean")
     if mod:
         mod.name = name
     bpy.context.object.modifiers[name].operand_type = operand_type
     bpy.context.object.modifiers[name].operation = operation
-    bpy.context.object.modifiers[name].solver = solver
+    bpy.context.object.modifiers[name].solver = "EXACT"
     if operand_type == "OBJECT":
         bpy.context.object.modifiers[name].object = x
     else:
         bpy.context.object.modifiers[name].collection = x
     bpy.ops.object.modifier_apply(modifier=name)
+
+
+def collection_new(name, boolean_proof=False):
+    collection = bpy.data.collections.new(name)
+    if boolean_proof:
+        collection.objects.link(primitive_of_size(0, 0, 0))
+    return collection
 
 
 cutout_collection = bpy.data.collections.new(CUTOUTS_COLLECTION)
@@ -233,7 +238,8 @@ compliance_angle = math.atan(w / h)
 compliance_hypotenuse = w / math.sin(compliance_angle)
 
 if not TILE_CENTER:
-    flanges_collection = bpy.data.collections.new(FLANGES_COLLECTION)
+    flanges_collection = collection_new(FLANGES_COLLECTION, boolean_proof=True)
+    grid_cutout_collection = collection_new(GRID_CUTOUTS_COLLECTION, boolean_proof=True)
 
 if TILE_BOTTOM:
     support_0 = primitive_of_size(SUPPORT_WIDTH, SUPPORT_HEIGHT, THICKNESS)
@@ -246,6 +252,8 @@ if TILE_BOTTOM:
     )
     boolean(support_0)
     array_offset(compliance_hypotenuse, 0, 0, X_GRID, name="flange_0")
+    hide(support_0)
+    hide(flange_0)
     flanges_collection.objects.link(flange_0)
 if TILE_TOP:
     support_1 = primitive_of_size(SUPPORT_WIDTH, SUPPORT_HEIGHT, THICKNESS)
@@ -268,33 +276,29 @@ if TILE_TOP:
     )
     boolean(support_1)
     array_offset(compliance_hypotenuse, 0, 0, X_GRID, name="flange_1")
+    hide(support_1)
+    hide(flange_1)
     flanges_collection.objects.link(flange_1)
 
 if TILE_BOTTOM:
-    hide(support_0)
-    hide(flange_0)
-if TILE_TOP:
-    hide(support_1)
-    hide(flange_1)
-
-grid_cutout_collection = bpy.data.collections.new(GRID_CUTOUTS_COLLECTION)
-bottom_grid_cutout = primitive_of_size(
-    X_SIZE + COMPLIANCE_LENGTH * 2, Y_SIZE + COMPLIANCE_LENGTH, THICKNESS
-)
-bpy.ops.transform.translate(value=(X_SIZE, 0, 0))
-hide(bottom_grid_cutout)
-grid_cutout_collection.objects.link(bottom_grid_cutout)
-
-top_grid_cutout = primitive_of_size(X_SIZE, COMPLIANCE_LENGTH, THICKNESS)
-bpy.ops.transform.translate(
-    value=(
-        -(Y_GRID - 1) * (X_SIZE * 2 + COMPLIANCE_LENGTH * 2),
-        (Y_GRID - 1) * (rh - h) + Y_SIZE * ASYMMETRIC_RATIO,
-        0,
+    bottom_grid_cutout = primitive_of_size(
+        X_SIZE + COMPLIANCE_LENGTH * 2, Y_SIZE + COMPLIANCE_LENGTH, THICKNESS
     )
-)
-hide(top_grid_cutout)
-grid_cutout_collection.objects.link(top_grid_cutout)
+    bpy.ops.transform.translate(value=(X_SIZE, 0, 0))
+    hide(bottom_grid_cutout)
+    grid_cutout_collection.objects.link(bottom_grid_cutout)
+
+if TILE_TOP:
+    top_grid_cutout = primitive_of_size(X_SIZE, COMPLIANCE_LENGTH, THICKNESS)
+    bpy.ops.transform.translate(
+        value=(
+            -(Y_GRID - 1) * (X_SIZE * 2 + COMPLIANCE_LENGTH * 2),
+            (Y_GRID - 1) * (rh - h) + Y_SIZE * ASYMMETRIC_RATIO,
+            0,
+        )
+    )
+    hide(top_grid_cutout)
+    grid_cutout_collection.objects.link(top_grid_cutout)
 
 base_block = primitive_of_size(
     (X_SIZE + COMPLIANCE_LENGTH) * 2,
@@ -313,7 +317,8 @@ array_offset(
     name="array_y",
 )
 
-boolean(grid_cutout_collection, operation="DIFFERENCE", operand_type="COLLECTION")
+if not TILE_CENTER:
+    boolean(grid_cutout_collection, operation="DIFFERENCE", operand_type="COLLECTION")
 
 array_offset(
     X_SIZE + COMPLIANCE_LENGTH, Y_SIZE + COMPLIANCE_LENGTH, 0, X_GRID, name="array_x"
@@ -322,61 +327,55 @@ array_offset(
 bpy.ops.transform.translate(value=(-X_SIZE, 0, 0))
 bpy.ops.transform.rotate(value=math.pi / 2 - compliance_angle, orient_axis="Z")
 if not TILE_CENTER:
-    boolean(
-        flanges_collection, operation="UNION", operand_type="COLLECTION", solver="FAST"
-    )
-# bpy.ops.transform.rotate(value=-math.pi / 2, orient_axis="X")
-# bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
-# min_x = min([i[0] for i in bpy.context.object.bound_box])
-# bpy.ops.transform.translate(value=(-min_x, 0, 0))
+    boolean(flanges_collection, operation="UNION", operand_type="COLLECTION")
+bpy.ops.transform.rotate(value=-math.pi / 2, orient_axis="X")
+bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+min_x = min([i[0] for i in bpy.context.object.bound_box])
+bpy.ops.transform.translate(value=(-min_x, 0, 0))
 
-# circumference = compliance_hypotenuse * X_GRID
-# radius = circumference / (2 * math.pi)
+circumference = compliance_hypotenuse * X_GRID
+radius = circumference / (2 * math.pi)
 
-# bpy.ops.mesh.primitive_circle_add(
-#     radius=radius,
-#     enter_editmode=False,
-#     align="WORLD",
-#     location=(0, -radius, 0),
-#     scale=(1, 1, 1),
-#     vertices=(X_GRID * CURVE_RESOLUTION),
-# )
-# circle = bpy.context.object
-# bpy.context.scene.cursor.location = [0, -THICKNESS, 0]
-# bpy.ops.object.origin_set(type="ORIGIN_CURSOR")
+bpy.ops.mesh.primitive_circle_add(
+    radius=radius,
+    enter_editmode=False,
+    align="WORLD",
+    location=(0, -radius, 0),
+    scale=(1, 1, 1),
+    vertices=(X_GRID * CURVE_RESOLUTION),
+)
+circle = bpy.context.object
+bpy.context.scene.cursor.location = [0, -THICKNESS, 0]
+bpy.ops.object.origin_set(type="ORIGIN_CURSOR")
 
-# bpy.ops.object.mode_set(mode="EDIT")
-# circle_mesh = bpy.context.object.data
+bpy.ops.object.mode_set(mode="EDIT")
+circle_mesh = bpy.context.object.data
 
-# bm = bmesh.from_edit_mesh(circle_mesh)
+bm = bmesh.from_edit_mesh(circle_mesh)
 
-# connection_vert = bm.verts[:][-1]
-# new_verts = [
-#     # bm.verts.new((vert.co.x, vert.co.y, vert.co.z + 1))
-#     bm.verts.new(vert.co)
-#     for vert in bm.verts[:]
-# ]
-# new_verts.append(bm.verts.new(new_verts[0].co))
-# bm.verts.index_update()
+connection_vert = bm.verts[:][-1]
+new_verts = [bm.verts.new(vert.co) for vert in bm.verts[:]]
+new_verts.append(bm.verts.new(new_verts[0].co))
+bm.verts.index_update()
 
-# bm.edges.remove(bm.edges[:][-1])
-# bm.edges.new([connection_vert, new_verts[0]])
-# new_edges = [
-#     bm.edges.new([vert, new_verts[i + 1]]) for i, vert in enumerate(new_verts[:-1])
-# ]
-# bm.edges.index_update()
+bm.edges.remove(bm.edges[:][-1])
+bm.edges.new([connection_vert, new_verts[0]])
+new_edges = [
+    bm.edges.new([vert, new_verts[i + 1]]) for i, vert in enumerate(new_verts[:-1])
+]
+bm.edges.index_update()
 
-# bmesh.update_edit_mesh(circle.data)
+bmesh.update_edit_mesh(circle.data)
 
-# bpy.ops.object.mode_set(mode="OBJECT")
-# bpy.ops.object.convert(target="CURVE")
+bpy.ops.object.mode_set(mode="OBJECT")
+bpy.ops.object.convert(target="CURVE")
 
-# bpy.context.view_layer.objects.active = base_block
-# if REMESH:
-#     bpy.ops.object.modifier_add(type="REMESH")
-#     bpy.context.object.modifiers["Remesh"].mode = "SHARP"
-#     bpy.context.object.modifiers["Remesh"].octree_depth = REMESH_RESOLUTION
-#     bpy.ops.object.modifier_apply(modifier="Remesh")
+bpy.context.view_layer.objects.active = base_block
+if REMESH:
+    bpy.ops.object.modifier_add(type="REMESH")
+    bpy.context.object.modifiers["Remesh"].mode = "SHARP"
+    bpy.context.object.modifiers["Remesh"].octree_depth = REMESH_RESOLUTION
+    bpy.ops.object.modifier_apply(modifier="Remesh")
 
-# bpy.ops.object.modifier_add(type="CURVE")
-# bpy.context.object.modifiers["Curve"].object = circle
+bpy.ops.object.modifier_add(type="CURVE")
+bpy.context.object.modifiers["Curve"].object = circle
