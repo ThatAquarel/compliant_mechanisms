@@ -14,6 +14,7 @@
 #define KI 0.00005
 #define KD 0.01
 
+volatile boolean carriage_homing = false;
 volatile boolean carriage_ready = false;
 volatile float enc_step = 0;
 float setpoint = 0;
@@ -49,6 +50,7 @@ Servo servos[n_servos];
 #define SYN 0xAB
 #define ACK 0x4B
 #define NAK 0x5A
+#define ERR 0x3C
 
 #define RESET 0x01
 #define MOVE_CARRIAGE 0x02
@@ -114,18 +116,28 @@ void enc_isr()
 
 void carriage_reset_isr()
 {
+  if (!carriage_homing)
+  {
+    return;
+  }
+
+  cli();
+
   carriage_motor_stop();
   enc_step = 0;
   setpoint = 0;
+  carriage_homing = false;
   carriage_ready = true;
+
+  sei();
 }
 
 void loop()
 {
-  // if (carriage_ready)
-  // {
-  //   process_pid();
-  // }
+  if (carriage_ready && !carriage_homing)
+  {
+    process_pid();
+  }
 
   recv_packet();
   if (new_packet)
@@ -137,8 +149,8 @@ void loop()
 
 void process_pid()
 {
-  unsigned long current_t = millis();
-  float dt = (float)(current_t - prev_t) / 1000.0;
+  unsigned long current_t = micros();
+  float dt = (float)(current_t - prev_t) / 1000000.0;
   prev_t = current_t;
 
   float dx = setpoint - enc_step;
@@ -187,27 +199,37 @@ void process_cmd()
     send_packet(ACK);
     break;
   case RESET:
-    if (carriage_ready)
+    if (carriage_homing)
     {
-      send_packet(NAK);
+      send_packet(ERR);
       break;
+    }
+    carriage_homing = true;
+    if (digitalRead(CARRIAGE_INT_PIN))
+    {
+      analogWrite(CARRIAGE_NEG_PIN, 255);
     }
     else
     {
-      if (digitalRead(CARRIAGE_INT_PIN))
-      {
-        analogWrite(CARRIAGE_NEG_PIN, 255);
-      }
-      else
-      {
-        carriage_reset_isr();
-      }
+      carriage_reset_isr();
     }
     send_packet(ACK);
     break;
   case MOVE_CARRIAGE:
-    // if (!carriage_ready) {
-    // }
+    if (!carriage_ready || carriage_homing)
+    {
+      send_packet(ERR);
+      break;
+    }
+    if (n != sizeof(setpoint))
+    {
+      send_packet(NAK);
+      break;
+    }
+    cli();
+    memcpy(&setpoint, serial_buffer, sizeof(setpoint));
+    sei();
+    send_packet(ACK);
     break;
   case MOVE_SERVO:
     break;
@@ -236,6 +258,7 @@ void recv_packet()
       if (rc == START_FLAG)
       {
         packet_status = 1;
+        n = 0;
       }
       break;
     case 1:
@@ -272,7 +295,6 @@ void recv_packet()
         new_packet = true;
       }
       packet_status = 0;
-      n = 0;
       break;
     }
   }
@@ -286,5 +308,4 @@ void send_packet(uint8_t cmd)
   Serial.write((uint8_t)0x00);
   Serial.write(END_FLAG);
   Serial.write(0x00);
-  Serial.flush();
 }
