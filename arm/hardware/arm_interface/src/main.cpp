@@ -28,9 +28,9 @@ unsigned long prev_t = 0;
 #define n_servos (N_LAYERS * N_SIDES)
 
 const int pins[n_servos] = {
-    2, 3, 4,
-    5, 6, 7,
-    8, 9, 10};
+    36, 37, 38,
+    39, 40, 41,
+    42, 43, 45};
 const int trim_min[n_servos] = {
     544, 544, 544,
     544, 544, 544,
@@ -39,6 +39,10 @@ const int trim_max[n_servos] = {
     2400, 2400, 2400,
     2400, 2400, 2400,
     2400, 2400, 2400};
+const int home_angle[n_servos] = {
+    90, 90, 90,
+    90, 90, 90,
+    90, 90, 90};
 
 Servo servos[n_servos];
 
@@ -53,8 +57,10 @@ Servo servos[n_servos];
 #define ERR 0x3C
 
 #define RESET 0x01
-#define MOVE_CARRIAGE 0x02
-#define MOVE_SERVO 0x03
+#define HOME_CARRIAGE 0x02
+#define HOME_SERVO 0x03
+#define MOVE_CARRIAGE 0x04
+#define MOVE_SERVO 0x05
 
 uint8_t serial_buffer[SERIAL_BUFFER_SIZE];
 byte n = 0;
@@ -99,7 +105,7 @@ void setup()
   }
 
   // serial
-  Serial.begin(9600);
+  Serial.begin(115200);
 }
 
 void enc_isr()
@@ -199,6 +205,14 @@ void process_cmd()
     send_packet(ACK);
     break;
   case RESET:
+    cli();
+    carriage_motor_stop();
+    carriage_ready = false;
+    carriage_homing = false;
+    sei();
+    send_packet(ACK);
+    break;
+  case HOME_CARRIAGE:
     if (carriage_homing)
     {
       send_packet(ERR);
@@ -212,6 +226,13 @@ void process_cmd()
     else
     {
       carriage_reset_isr();
+    }
+    send_packet(ACK);
+    break;
+  case HOME_SERVO:
+    for (int i = 0; i < n_servos; i++)
+    {
+      servos[i].write(home_angle[i]);
     }
     send_packet(ACK);
     break;
@@ -232,6 +253,15 @@ void process_cmd()
     send_packet(ACK);
     break;
   case MOVE_SERVO:
+    if (n != n_servos * sizeof(uint8_t))
+    {
+      send_packet(NAK);
+      break;
+    }
+    for (int i = 0; i < n_servos; i++) {
+      servos[i].write((int) serial_buffer[i]);
+    }
+    send_packet(ACK);
     break;
   default:
     send_packet(NAK);
