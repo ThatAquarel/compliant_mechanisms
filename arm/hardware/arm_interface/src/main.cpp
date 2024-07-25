@@ -3,8 +3,8 @@
 
 // carriage
 #define CARRIAGE_INT_PIN 18
-#define CARRIAGE_NEG_PIN 44
-#define CARRIAGE_POS_PIN 46
+#define CARRIAGE_NEG_PIN 2
+#define CARRIAGE_POS_PIN 3
 
 #define ENC_A_PIN 19
 #define ENC_B_PIN 20
@@ -17,7 +17,7 @@
 volatile boolean carriage_homing = false;
 volatile boolean carriage_ready = false;
 volatile float enc_step = 0;
-float setpoint = 0;
+volatile float setpoint = 0;
 float prev_dx = 0, integral = 0;
 unsigned long prev_t = 0;
 
@@ -39,12 +39,14 @@ const int trim_max[n_servos] = {
     2400, 2400, 2400,
     2400, 2400, 2400,
     2400, 2400, 2400};
-const int home_angle[n_servos] = {
+const uint8_t home_angle[n_servos] = {
     90, 90, 90,
     90, 90, 90,
     90, 90, 90};
 
 Servo servos[n_servos];
+volatile boolean servo_ready = false;
+uint8_t servo_setpoint[n_servos];
 
 // serial communications
 #define SERIAL_BUFFER_SIZE 64
@@ -75,6 +77,7 @@ void carriage_motor_set(float value);
 void carriage_motor_stop();
 
 void process_pid();
+void process_servo();
 void process_cmd();
 
 void recv_packet();
@@ -126,16 +129,11 @@ void carriage_reset_isr()
   {
     return;
   }
-
-  cli();
-
   carriage_motor_stop();
   enc_step = 0;
   setpoint = 0;
   carriage_homing = false;
   carriage_ready = true;
-
-  sei();
 }
 
 void loop()
@@ -143,6 +141,10 @@ void loop()
   if (carriage_ready && !carriage_homing)
   {
     process_pid();
+  }
+  if (servo_ready)
+  {
+    process_servo();
   }
 
   recv_packet();
@@ -193,8 +195,17 @@ void carriage_motor_set(float value)
 
 void carriage_motor_stop()
 {
-  analogWrite(CARRIAGE_POS_PIN, 0);
-  analogWrite(CARRIAGE_NEG_PIN, 0);
+  digitalWrite(CARRIAGE_POS_PIN, 0);
+  digitalWrite(CARRIAGE_NEG_PIN, 0);
+  // PORTL = PORTL & B11010111;
+}
+
+void process_servo()
+{
+  for (int i = 0; i < n_servos; i++)
+  {
+    servos[i].write((int)servo_setpoint[i]);
+  }
 }
 
 void process_cmd()
@@ -205,11 +216,11 @@ void process_cmd()
     send_packet(ACK);
     break;
   case RESET:
-    cli();
     carriage_motor_stop();
     carriage_ready = false;
     carriage_homing = false;
-    sei();
+
+    servo_ready = false;
     send_packet(ACK);
     break;
   case HOME_CARRIAGE:
@@ -230,10 +241,8 @@ void process_cmd()
     send_packet(ACK);
     break;
   case HOME_SERVO:
-    for (int i = 0; i < n_servos; i++)
-    {
-      servos[i].write(home_angle[i]);
-    }
+    memcpy((uint8_t *)servo_setpoint, home_angle, n_servos * sizeof(uint8_t));
+    servo_ready = true;
     send_packet(ACK);
     break;
   case MOVE_CARRIAGE:
@@ -247,20 +256,21 @@ void process_cmd()
       send_packet(NAK);
       break;
     }
-    cli();
-    memcpy(&setpoint, serial_buffer, sizeof(setpoint));
-    sei();
+    memcpy((float *)&setpoint, serial_buffer, sizeof(setpoint));
     send_packet(ACK);
     break;
   case MOVE_SERVO:
+    if (!servo_ready)
+    {
+      send_packet(ERR);
+      break;
+    }
     if (n != n_servos * sizeof(uint8_t))
     {
       send_packet(NAK);
       break;
     }
-    for (int i = 0; i < n_servos; i++) {
-      servos[i].write((int) serial_buffer[i]);
-    }
+    memcpy((uint8_t *)servo_setpoint, serial_buffer, n_servos * sizeof(uint8_t));
     send_packet(ACK);
     break;
   default:
