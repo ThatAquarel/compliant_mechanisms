@@ -24,7 +24,7 @@ for file in image_files:
 
     if ret:
         chess = cv2.drawChessboardCorners(img, CHECKERBOARD, corners, ret)
-        cv2.imwrite(f"{file}_chess.png", chess)
+        # cv2.imwrite(f"{file}_chess.png", chess)
         objpoints.append(objp)
         imgpoints.append(corners)
 
