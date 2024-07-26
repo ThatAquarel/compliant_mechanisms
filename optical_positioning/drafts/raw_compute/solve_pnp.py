@@ -11,39 +11,69 @@ objp[:, :2] = np.mgrid[0 : chessboard_size[0], 0 : chessboard_size[1]].T.reshape
 objp *= square_size
 
 # Define camera intrinsics (example values, replace with your camera calibration results)
-K = np.array([[640.0, 0.0, 640.0], [0.0, 640.0, 400.0], [0.0, 0.0, 1.0]])
+K = np.array(
+    [
+        [362.47678783, 0.0, 403.38813512],
+        [0.0, 362.85757174, 427.99828281],
+        [0.0, 0.0, 1.0],
+    ]
+)
 
-camera_matrix_1 = np.array(K, dtype=np.float32)
-dist_coeffs_1 = np.zeros((5, 1), dtype=np.float32)
+D = np.array([-0.04804361, -0.00403489, -0.00232701, 0.00063726])
 
-camera_matrix_2 = np.array(K, dtype=np.float32)
-dist_coeffs_2 = np.zeros((5, 1), dtype=np.float32)
+camera_matrix_1 = K
+dist_coeffs_1 = D
 
-camera_matrix_3 = np.array(K, dtype=np.float32)
-dist_coeffs_3 = np.zeros((5, 1), dtype=np.float32)
+camera_matrix_2 = K
+dist_coeffs_2 = D
+
+camera_matrix_3 = K
+dist_coeffs_3 = D
 
 # Detect chessboard corners for each camera image (example)
 
 
-def find_points(image):
+def undistort_fisheye(image, K, D):
+    DIM = image.shape[:2][::-1]
+    K_new, roi = cv2.getOptimalNewCameraMatrix(K, D, DIM, 1.0, DIM)
+    map1, map2 = cv2.fisheye.initUndistortRectifyMap(
+        K,
+        D,
+        np.eye(3),
+        K_new,
+        DIM,
+        cv2.CV_16SC2,
+    )
+    undistorted_img = cv2.remap(
+        image,
+        map1,
+        map2,
+        interpolation=cv2.INTER_LINEAR,
+        borderMode=cv2.BORDER_CONSTANT,
+    )
+    return undistorted_img, K_new
+
+
+def find_points(image, k, d):
     img = cv2.imread(image)
+    img, k_new = undistort_fisheye(img, k, d)
+
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     _, corners = cv2.findChessboardCorners(gray, chessboard_size, None)
 
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
-    corners = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), criteria)
-    return corners
-    # return cv2.fisheye.undistortPoints(corners, K, np.zeros((4, 1)))
+    corners = cv2.cornerSubPix(gray, corners, (8, 8), (-1, -1), criteria)
+    return corners, k_new
 
 
-image_points_1 = find_points(
-    "optical_positioning/drafts/raw_compute/img_0.png"
+image_points_1, camera_matrix_1 = find_points(
+    "optical_positioning/drafts/raw_compute/img_0.png", camera_matrix_1, dist_coeffs_1
 )  # 2D points from camera 1 image
-image_points_2 = find_points(
-    "optical_positioning/drafts/raw_compute/img_1.png"
+image_points_2, camera_matrix_2 = find_points(
+    "optical_positioning/drafts/raw_compute/img_1.png", camera_matrix_2, dist_coeffs_2
 )  # 2D points from camera 2 image
-image_points_3 = find_points(
-    "optical_positioning/drafts/raw_compute/img_2.png"
+image_points_3, camera_matrix_3 = find_points(
+    "optical_positioning/drafts/raw_compute/img_2.png", camera_matrix_3, dist_coeffs_3
 )  # 2D points from camera 3 image
 
 # Solve PnP for each camera
@@ -74,13 +104,13 @@ def draw_axes(img, img_pts):
     img_pts = img_pts.astype(np.int32)
     # Draw the axes
     img = cv2.line(
-        img, tuple(img_pts[0].ravel()), tuple(img_pts[1].ravel()), (255, 0, 0), 5
+        img, tuple(img_pts[0].ravel()), tuple(img_pts[1].ravel()), (255, 0, 0), 3
     )  # X-axis in blue
     img = cv2.line(
-        img, tuple(img_pts[0].ravel()), tuple(img_pts[2].ravel()), (0, 255, 0), 5
+        img, tuple(img_pts[0].ravel()), tuple(img_pts[2].ravel()), (0, 255, 0), 3
     )  # Y-axis in green
     img = cv2.line(
-        img, tuple(img_pts[0].ravel()), tuple(img_pts[3].ravel()), (0, 0, 255), 5
+        img, tuple(img_pts[0].ravel()), tuple(img_pts[3].ravel()), (0, 0, 255), 3
     )  # Z-axis in red
     return img
 
@@ -89,14 +119,33 @@ def draw_axes(img, img_pts):
 axis = np.float32([[0, 0, 0], [0.05, 0, 0], [0, 0.05, 0], [0, 0, -0.05]]).reshape(-1, 3)
 
 img = cv2.imread("optical_positioning/drafts/raw_compute/img_0.png")
-# Project the 3D points to the image plane
-img_pts, _ = cv2.projectPoints(axis, rvec_1, tvec_1, K, np.zeros(0))
-
-# Draw the chessboard corners and the axes
+img, k_new = undistort_fisheye(img, K, D)
+img_pts, _ = cv2.projectPoints(axis, rvec_1, tvec_1, k_new, D)
 img = cv2.drawChessboardCorners(img, chessboard_size, image_points_1, True)
 img = draw_axes(img, img_pts)
 
 # Display the image
 cv2.imshow("Pose Estimation", img)
 cv2.waitKey(0)
+
+img = cv2.imread("optical_positioning/drafts/raw_compute/img_1.png")
+img, k_new = undistort_fisheye(img, K, D)
+img_pts, _ = cv2.projectPoints(axis, rvec_2, tvec_2, k_new, D)
+img = cv2.drawChessboardCorners(img, chessboard_size, image_points_2, True)
+img = draw_axes(img, img_pts)
+
+# Display the image
+cv2.imshow("Pose Estimation", img)
+cv2.waitKey(0)
+
+img = cv2.imread("optical_positioning/drafts/raw_compute/img_2.png")
+img, k_new = undistort_fisheye(img, K, D)
+img_pts, _ = cv2.projectPoints(axis, rvec_3, tvec_3, k_new, D)
+img = cv2.drawChessboardCorners(img, chessboard_size, image_points_3, True)
+img = draw_axes(img, img_pts)
+
+# Display the image
+cv2.imshow("Pose Estimation", img)
+cv2.waitKey(0)
+
 cv2.destroyAllWindows()
