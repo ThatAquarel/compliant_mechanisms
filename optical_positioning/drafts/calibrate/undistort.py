@@ -19,9 +19,15 @@ import numpy as np
 # )
 # D1 = np.array([[-0.26426162], [0.73247824], [0.05607988], [-17.91802217]])
 
-# K1 = np.array([[1000.0, 0.0, 639.5], [0.0, 1000.0, 399.5], [0.0, 0.0, 1.0]])
+K1 = np.array(
+    [
+        [362.47678783, 0.0, 403.38813512],
+        [0.0, 362.85757174, 427.99828281],
+        [0.0, 0.0, 1.0],
+    ]
+)
 
-# D1 = np.array([[0.0], [0.0], [0.0], [0.0]])
+D1 = np.array([-0.04804361, -0.00403489, -0.00232701, 0.00063726])
 
 # Open the camera streams
 cap1 = cv2.VideoCapture(0, cv2.CAP_DSHOW)
@@ -32,12 +38,13 @@ cap1.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
 
 def undistort_fisheye(image, K, D):
     DIM = image.shape[:2][::-1]
+    K_new, roi = cv2.getOptimalNewCameraMatrix(K, D, DIM, 1.0, DIM)
     map1, map2 = cv2.fisheye.initUndistortRectifyMap(
         # K, None, np.eye(3), K, DIM, cv2.CV_16SC2
         K,
         D,
         np.eye(3),
-        K,
+        K_new,
         DIM,
         cv2.CV_16SC2,
     )
@@ -54,6 +61,7 @@ def undistort_fisheye(image, K, D):
 while True:
     # Capture frames from each camera
     ret1, frame1 = cap1.read()
+    frame1 = frame1[:, 240:1040]
 
     if not ret1:
         print("Failed to capture images")
@@ -64,16 +72,14 @@ while True:
 
     # Show the undistorted frames
 
-    cv2.resize(undistorted_frame1, (960, 600), interpolation=cv2.INTER_LINEAR)
-
     cv2.imshow(
         "Camera 1",
         cv2.hconcat(
             [
                 cv2.resize(
-                    undistorted_frame1, (960, 600), interpolation=cv2.INTER_LINEAR
+                    undistorted_frame1, (800, 800), interpolation=cv2.INTER_LINEAR
                 ),
-                cv2.resize(frame1, (960, 600), interpolation=cv2.INTER_LINEAR),
+                cv2.resize(frame1, (800, 800), interpolation=cv2.INTER_LINEAR),
             ]
         ),
     )
