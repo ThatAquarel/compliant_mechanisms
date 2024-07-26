@@ -113,14 +113,14 @@ def draw_axes(img, img_pts):
     img_pts = img_pts.astype(np.int32)
     # Draw the axes
     img = cv2.line(
-        img, tuple(img_pts[0].ravel()), tuple(img_pts[1].ravel()), (255, 0, 0), 3
-    )  # X-axis in blue
+        img, tuple(img_pts[0].ravel()), tuple(img_pts[1].ravel()), (0, 0, 255), 3
+    )  # X-axis in red
     img = cv2.line(
         img, tuple(img_pts[0].ravel()), tuple(img_pts[2].ravel()), (0, 255, 0), 3
     )  # Y-axis in green
     img = cv2.line(
-        img, tuple(img_pts[0].ravel()), tuple(img_pts[3].ravel()), (0, 0, 255), 3
-    )  # Z-axis in red
+        img, tuple(img_pts[0].ravel()), tuple(img_pts[3].ravel()), (255, 0, 0), 3
+    )  # Z-axis in blue
     return img
 
 
@@ -141,8 +141,22 @@ while True:
         _, rvec, tvec = cv2.solvePnP(objp, corners, K_new, D)
         r_1, _ = cv2.Rodrigues(rvec)
 
-        ax.scatter(tvec[0], tvec[2], -tvec[1], marker="^", color="red")
+        # ax.scatter(tvec[0], tvec[2], -tvec[1], marker="^", color="red")
         # ax.scatter(*tvec, marker="^", color="red")
+
+        T_w_c = np.eye(4)
+        T_w_c[0:3, 0:3] = r_1
+        T_w_c[0:3, 3:4] = tvec
+        T_c_w = np.linalg.inv(T_w_c)
+        tvec_c_w = T_c_w[0:3, 3:4]
+
+        # world at (0, 0, 0), camera moving
+        # ax.scatter(*tvec_c_w.flatten(), marker="^", color="red")
+
+        # camera at (0, 0, 0), world moving
+        T_cv_bl = np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]]).T
+        ax.scatter(*tvec.flatten() @ T_cv_bl, marker="^", color="black")
+        ax.quiver(*[0, 0, 0], *([0, 0, 1, 1] @ T_w_c.T)[0:3] @ T_cv_bl, color="black")
 
         axis_cv = np.float32(
             [[0, 0, 0], [0.05, 0, 0], [0, 0.05, 0], [0, 0, 0.05]]
@@ -150,13 +164,12 @@ while True:
         img_pts, _ = cv2.projectPoints(axis_cv, rvec, tvec, K_new, D)
         frame = draw_axes(frame, img_pts)
 
-    ax.scatter(*[0, 0, 0], color="black")
     axis_math = np.float32(
         [[0, 0, 0], [0.05, 0, 0], [0, 0.05, 0], [0, 0, 0.05]]
     ).reshape(-1, 3)
-    ax.quiver(*[0, 0, 0], *axis_math[1], color="blue")
+    ax.quiver(*[0, 0, 0], *axis_math[1], color="red")
     ax.quiver(*[0, 0, 0], *axis_math[2], color="green")
-    ax.quiver(*[0, 0, 0], *axis_math[3], color="red")
+    ax.quiver(*[0, 0, 0], *axis_math[3], color="blue")
     plt.axis("equal")
     ax.set_xlim([-0.25, 0.25])
     ax.set_ylim([-0.25, 0.25])
