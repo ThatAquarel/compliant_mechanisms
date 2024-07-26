@@ -149,3 +149,30 @@ cv2.imshow("Pose Estimation", img)
 cv2.waitKey(0)
 
 cv2.destroyAllWindows()
+
+
+import matplotlib.pyplot as plt
+
+fig = plt.figure()
+ax = fig.add_subplot(111, projection="3d")
+
+ax.set_xlabel("u")
+ax.set_ylabel("v")
+ax.set_zlabel("w")
+
+ax.set_box_aspect([1, 1, 1])
+plt.axis("scaled")
+ax.set_xlim([-0.5, 0.5])
+ax.set_ylim([-0.5, 0.5])
+ax.set_zlim([0, 1])
+
+ax.scatter(*[0, 0, 0], color="black")
+ax.quiver(*[0, 0, 0], *axis[1], color="blue")
+ax.quiver(*[0, 0, 0], *axis[2], color="green")
+ax.quiver(*[0, 0, 0], *axis[3], color="red")
+
+ax.scatter(tvec_1[0], tvec_1[2], -tvec_1[1], marker="^", color="red")
+ax.scatter(tvec_2[0], tvec_2[2], -tvec_2[1], marker="^", color="green")
+ax.scatter(tvec_3[0], tvec_3[2], -tvec_3[1], marker="^", color="blue")
+
+plt.show()
