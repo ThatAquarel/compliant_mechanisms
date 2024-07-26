@@ -50,8 +50,8 @@ while True:
         f = 640
         normalized_corners = (corners2 - [w / 2, h / 2]) / f
         corners_x, corners_y = normalized_corners[:, :, 0], normalized_corners[:, :, 1]
-        theta = np.sqrt(corners_x**2, corners_y**2)
-        w = np.sqrt(corners_x**2, corners_y**2) / np.tan(theta)
+        theta = np.sqrt(corners_x**2 + corners_y**2)
+        w = np.sqrt(corners_x**2 + corners_y**2) / np.tan(theta)
 
         zero = np.zeros(w.shape)
 
