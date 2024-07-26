@@ -57,7 +57,7 @@ objp = (
     )
     / 100
 )
-q
+
 
 K = np.array(
     [
