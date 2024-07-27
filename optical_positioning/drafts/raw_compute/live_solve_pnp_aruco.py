@@ -156,7 +156,7 @@ while True:
         # camera at (0, 0, 0), world moving
         T_cv_bl = np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]]).T
         ax.scatter(*tvec.flatten() @ T_cv_bl, marker="^", color="black")
-        ax.quiver(*[0, 0, 0], *([0, 0, 1, 1] @ T_w_c.T)[0:3] @ T_cv_bl, color="black")
+        ax.quiver(*[0, 0, 0], *([0, 0, 1, 1] @ T_w_c)[0:3], color="black", length=0.25)
 
         axis_cv = np.float32(
             [[0, 0, 0], [0.05, 0, 0], [0, 0.05, 0], [0, 0, 0.05]]
