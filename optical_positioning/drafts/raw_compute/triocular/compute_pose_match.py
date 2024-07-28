@@ -222,30 +222,30 @@ ids_2, corners_2 = get_corner_intersection(
 )
 obj_pos_2 = compute_obj_pos(projection_matrix[0], projection_matrix[2], *corners_2)
 
-# import scipy.optimize
+import scipy.optimize
 
 
-# def find_point_transform(points_0, points_1):
-#     def transform_mse(T, x, y):
-#         T = T.reshape((4, 3))
+def find_point_transform(points_0, points_1):
+    def transform_mse(T, x, y):
+        T = T.reshape((4, 3))
 
-#         xT = x @ T
-#         se = (xT - y) ** 2
-#         mse = np.mean(se, axis=1)
+        xT = x @ T
+        se = (xT - y) ** 2
+        mse = np.mean(se, axis=1)
 
-#         return mse
+        return mse
 
-#     T_i = np.eye(4)[0:4, 0:3]
-#     initial_params = T_i.flatten()
-#     result = scipy.optimize.least_squares(
-#         transform_mse, initial_params, args=(points_0, points_1)
-#     )
+    T_i = np.eye(4)[0:4, 0:3]
+    initial_params = T_i.flatten()
+    result = scipy.optimize.least_squares(
+        transform_mse, initial_params, args=(points_0, points_1)
+    )
 
-#     return result.x.reshape((4, 3))
+    return result.x.reshape((4, 3))
 
 
-# ids_a, ind_0a, ind_1a = np.intersect1d(ids_0, ids_1, return_indices=True)
-# ids_b, ind_0b, ind_2b = np.intersect1d(ids_0, ids_2, return_indices=True)
+ids_a, ind_0a, ind_1a = np.intersect1d(ids_0, ids_1, return_indices=True)
+ids_b, ind_0b, ind_2b = np.intersect1d(ids_0, ids_2, return_indices=True)
 
 import matplotlib.pyplot as plt
 
