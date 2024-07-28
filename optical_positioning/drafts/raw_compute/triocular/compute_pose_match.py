@@ -244,8 +244,27 @@ def find_point_transform(points_0, points_1):
     return result.x.reshape((4, 3))
 
 
+def homogenize_coordinates(points):
+    w = np.ones((len(points), 1))
+    return np.hstack((points, w))
+
+
 ids_a, ind_0a, ind_1a = np.intersect1d(ids_0, ids_1, return_indices=True)
 ids_b, ind_0b, ind_2b = np.intersect1d(ids_0, ids_2, return_indices=True)
+
+points_0a = obj_pos_0.T.reshape((-1, 1, 4, 3))[ind_0a].reshape((-1, 3))
+points_0b = obj_pos_0.T.reshape((-1, 1, 4, 3))[ind_0b].reshape((-1, 3))
+
+points_1a = obj_pos_1.T.reshape((-1, 1, 4, 3))[ind_1a].reshape((-1, 3))
+points_1a = homogenize_coordinates(points_1a)
+points_2b = obj_pos_2.T.reshape((-1, 1, 4, 3))[ind_2b].reshape((-1, 3))
+points_2b = homogenize_coordinates(points_2b)
+
+T_1_0 = find_point_transform(points_1a, points_0a)
+T_2_0 = find_point_transform(points_2b, points_0b)
+
+obj_pos_1 = points_1a @ T_1_0
+obj_pos_2 = points_2b @ T_2_0
 
 import matplotlib.pyplot as plt
 
@@ -257,8 +276,8 @@ ax.set_ylabel("y")
 ax.set_zlabel("z")
 
 ax.scatter(*obj_pos_0, color="red")
-ax.scatter(*obj_pos_1, color="green")
-ax.scatter(*obj_pos_2, color="blue")
+ax.scatter(*obj_pos_1.T, color="green")
+ax.scatter(*obj_pos_2.T, color="blue")
 
 axis_math = np.float32([[0, 0, 0], [0.05, 0, 0], [0, 0.05, 0], [0, 0, 0.05]]).reshape(
     -1, 3
