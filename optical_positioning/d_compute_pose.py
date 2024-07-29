@@ -10,6 +10,7 @@ import matplotlib.animation as animation
 
 
 import a_constants
+import e_render
 
 
 def undistort_map(K, D):
@@ -211,7 +212,9 @@ def axis(_, axis_channels, axis_ready, axis_data):
 def position(stop_event, position_channels, axis_ready, axis_data):
     axis_ready.wait()
     mono_proj_mat, mono_combinations, stereo_bundle_transform = axis_data.get()
-    markers_position = np.empty((a_constants.ARUCO_ID_LIMIT, 4, 3), dtype=np.float32)
+    markers_position = np.zeros((a_constants.ARUCO_ID_LIMIT, 4, 3), dtype=np.float32)
+    markers_count = np.zeros(a_constants.ARUCO_ID_LIMIT, dtype=np.float32)
+    markers_map = np.zeros(a_constants.ARUCO_ID_LIMIT, dtype=np.bool)
 
     print("axis data acquired, positioning using axis")
 
@@ -219,9 +222,7 @@ def position(stop_event, position_channels, axis_ready, axis_data):
     fig = plt.figure()
     ax = fig.add_subplot(111, projection="3d")
 
-    scatters = [
-        ax.scatter([0], [0], [0], marker="^", color=c) for c in ["red", "green", "blue"]
-    ]
+    scatter = ax.scatter([0], [0], [0], marker="^", color="black")
 
     ax.set_xlabel("x")
     ax.set_ylabel("y")
@@ -247,6 +248,9 @@ def position(stop_event, position_channels, axis_ready, axis_data):
         if None in mono_data:
             break
 
+        markers_map[:] = False
+        markers_count[:] = 0
+        markers_position[:] = 0
         for i, (a, b) in enumerate(mono_combinations):
             (ids_a, corners_a), (ids_b, corners_b) = mono_data[a], mono_data[b]
 
@@ -267,12 +271,23 @@ def position(stop_event, position_channels, axis_ready, axis_data):
             points_ab = points_ab.T
             if i > 0:
                 points_ab = homogenize(points_ab) @ stereo_bundle_transform[i - 1]
+            markers_map[ids_ab] = True
+            markers_count[ids_ab] += 1
+            markers_position[ids_ab] += points_ab.reshape((-1, 4, 3))
+        markers_position[markers_map] /= markers_count[
+            markers_map, np.newaxis, np.newaxis
+        ]
 
-            scatters[i]._offsets3d = points_ab.T
+        scatter._offsets3d = markers_position[markers_map].reshape((-1, 3)).T
 
         fig.canvas.draw()
         fig.canvas.flush_events()
+
     stop_event.set()
+
+
+def render(stop_event, position_computed_channels):
+    pass
 
 
 def manager(frame_event, stop_event):
@@ -329,6 +344,7 @@ def main():
         target=position,
         args=(stop_event, position_channels, axis_ready, axis_data),
     )
+    render_process = Process()
 
     for cam_thread in camera_processes:
         cam_thread.start()
