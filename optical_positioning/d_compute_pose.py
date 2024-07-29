@@ -5,6 +5,9 @@ from multiprocessing import Process, Event, Queue
 import cv2
 import numpy as np
 import scipy.optimize
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+
 
 import a_constants
 
@@ -31,16 +34,16 @@ def aruco_detector():
     return cv2.aruco.ArucoDetector(aruco_dict, parameters)
 
 
-def camera(camera_id, frame_event, stop_event, axis_events, axis_queues):
-    with open(f"{a_constants.MATRIX_DIR}cam_{camera_id}_K.npy", "rb") as f:
+def camera(id, frame_event, stop_event, axis_channels, position_channels, axis_ready):
+    with open(f"{a_constants.MATRIX_DIR}cam_{id}_K.npy", "rb") as f:
         K = np.load(f)
-    with open(f"{a_constants.MATRIX_DIR}cam_{camera_id}_D.npy", "rb") as f:
+    with open(f"{a_constants.MATRIX_DIR}cam_{id}_D.npy", "rb") as f:
         D = np.load(f)
     K, map_1, map_2 = undistort_map(K, D)
 
     detector = aruco_detector()
 
-    cap = a_constants.camera_capture(camera_id)
+    cap = a_constants.camera_capture(id)
     while not stop_event.is_set():
         ret, frame = cap.read()
         frame = a_constants.camera_crop(frame)
@@ -52,13 +55,19 @@ def camera(camera_id, frame_event, stop_event, axis_events, axis_queues):
         if type(ids) != type(None):
             frame = cv2.aruco.drawDetectedMarkers(frame, corners, ids)
 
-            if not axis_events[camera_id].is_set():
-                axis_events[camera_id].set()
-                axis_queues[camera_id].put((ids, corners, K))
+            axis_event, axis_queue = axis_channels[id]
+            if not axis_event.is_set():
+                axis_event.set()
+                axis_queue.put((ids, corners, K))
+
+            if axis_ready.is_set():
+                position_event, position_queue = position_channels[id]
+                position_event.set()
+                position_queue.put((ids, corners))
 
         if ret:
             frame_event.set()
-            cv2.imshow(f"camera {camera_id}", frame)
+            cv2.imshow(f"camera {id}", frame)
         key = cv2.waitKey(1) & 0xFF
         if key == ord("q"):
             stop_event.set()
@@ -85,14 +94,14 @@ def homogenize(points):
     return np.hstack((points, w))
 
 
-def axis(_, axis_events, axis_queues, axis_ready, axis_data):
+def axis(_, axis_channels, axis_ready, axis_data):
     print("axis solve")
 
     mono_proj_mat = []
     mono_corners = []
     mono_ids = []
 
-    for i, (event, queue) in enumerate(zip(axis_events, axis_queues)):
+    for i, (event, queue) in enumerate(axis_channels):
         event.wait()
         ids, corners, K = queue.get()
 
@@ -113,6 +122,7 @@ def axis(_, axis_events, axis_queues, axis_ready, axis_data):
 
         if ret:
             print(f"solve pnp success, index: {i}")
+        print(f"n markers: {len(ids)}")
 
         r_1, _ = cv2.Rodrigues(rvec)
         proj_mat = K @ np.hstack((r_1, tvec.reshape((3, 1))))
@@ -125,13 +135,14 @@ def axis(_, axis_events, axis_queues, axis_ready, axis_data):
     stereo_ids = []
     stereo_points = []
     stereo_bundle_transform = []
-    mono_combinations = itertools.combinations(range(a_constants.N_CAMERAS), 2)
+    mono_combinations = list(itertools.combinations(range(a_constants.N_CAMERAS), 2))
     for i, (a, b) in enumerate(mono_combinations):
         corners_a, corners_b = mono_corners[a], mono_corners[b]
 
         ids_ab, corners_a, corners_b = get_ids_intersection(
             mono_ids[a], mono_ids[b], corners_a, corners_b
         )
+        print(f"stereo {a}_{b} n intersect markers: {len(ids_ab)}")
 
         points_ab = get_points(
             mono_proj_mat[a],
@@ -144,11 +155,14 @@ def axis(_, axis_events, axis_queues, axis_ready, axis_data):
             ids_base = stereo_ids[0]
             points_base = stereo_points[0]
 
-            _, points_base, points_ab = get_ids_intersection(
+            ids_base_ab, points_base, points_ab = get_ids_intersection(
                 ids_base,
                 ids_ab,
                 points_base.T.reshape((-1, 4, 3)),
                 points_ab.T.reshape((-1, 4, 3)),
+            )
+            print(
+                f"stereo {a}_{b}, with stereo 0_1, n intersect markers: {len(ids_base_ab)}"
             )
             points_base = homogenize(points_base.reshape((-1, 3)))
             points_ab = points_ab.reshape((-1, 3))
@@ -188,13 +202,77 @@ def axis(_, axis_events, axis_queues, axis_ready, axis_data):
         stereo_ids.append(ids_ab)
         stereo_points.append(points_ab)
 
-    print("axis ready")
     axis_ready.set()
+    axis_data.put((mono_proj_mat, mono_combinations, stereo_bundle_transform))
+    print("axis ready")
+    print()
 
 
-def position(stop_event, axis_ready, axis_data):
+def position(stop_event, position_channels, axis_ready, axis_data):
     axis_ready.wait()
-    print("positioning using axis")
+    mono_proj_mat, mono_combinations, stereo_bundle_transform = axis_data.get()
+    markers_position = np.empty((a_constants.ARUCO_ID_LIMIT, 4, 3), dtype=np.float32)
+
+    print("axis data acquired, positioning using axis")
+
+    plt.ion()
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection="3d")
+
+    scatters = [
+        ax.scatter([0], [0], [0], marker="^", color=c) for c in ["red", "green", "blue"]
+    ]
+
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
+    ax.set_zlabel("z")
+
+    axis_math = np.float32(
+        [[0, 0, 0], [0.05, 0, 0], [0, 0.05, 0], [0, 0, 0.05]]
+    ).reshape(-1, 3)
+    ax.quiver(*[0, 0, 0], *axis_math[1], color="red")
+    ax.quiver(*[0, 0, 0], *axis_math[2], color="green")
+    ax.quiver(*[0, 0, 0], *axis_math[3], color="blue")
+    plt.axis("equal")
+    ax.set_xlim([-0.25, 0.25])
+    ax.set_ylim([-0.25, 0.25])
+    ax.set_zlim([-0.25, 0.25])
+
+    while not stop_event.is_set():
+        mono_data = []
+        for event, queue in position_channels:
+            event.wait()
+            event.clear()
+            mono_data.append(queue.get())
+        if None in mono_data:
+            break
+
+        for i, (a, b) in enumerate(mono_combinations):
+            (ids_a, corners_a), (ids_b, corners_b) = mono_data[a], mono_data[b]
+
+            ids_ab, corners_a, corners_b = get_ids_intersection(
+                ids_a.flatten(),
+                ids_b.flatten(),
+                np.array(corners_a),
+                np.array(corners_b),
+            )
+
+            points_ab = get_points(
+                mono_proj_mat[a],
+                mono_proj_mat[b],
+                corners_a.reshape((-1, 2)).T,
+                corners_b.reshape((-1, 2)).T,
+            )
+
+            points_ab = points_ab.T
+            if i > 0:
+                points_ab = homogenize(points_ab) @ stereo_bundle_transform[i - 1]
+
+            scatters[i]._offsets3d = points_ab.T
+
+        fig.canvas.draw()
+        fig.canvas.flush_events()
+    stop_event.set()
 
 
 def manager(frame_event, stop_event):
@@ -223,23 +301,33 @@ def main():
     frame_event = Event()
     manager_process = Process(target=manager, args=(frame_event, stop_event))
 
-    axis_events = [Event() for _ in a_constants.CAMERAS]
-    axis_queues = [Queue() for _ in a_constants.CAMERAS]
+    axis_channels = [(Event(), Queue()) for _ in a_constants.CAMERAS]
+    position_channels = [(Event(), Queue()) for _ in a_constants.CAMERAS]
+
+    axis_ready = Event()
+    axis_data = Queue()
+
     camera_processes = [
         Process(
             target=camera,
-            args=(cam_id, frame_event, stop_event, axis_events, axis_queues),
+            args=(
+                cam_id,
+                frame_event,
+                stop_event,
+                axis_channels,
+                position_channels,
+                axis_ready,
+            ),
         )
         for cam_id in a_constants.CAMERAS
     ]
 
-    axis_ready = Event()
-    axis_data = Queue()
     axis_process = Process(
-        target=axis, args=(stop_event, axis_events, axis_queues, axis_ready, axis_data)
+        target=axis, args=(stop_event, axis_channels, axis_ready, axis_data)
     )
     position_process = Process(
-        target=position, args=(stop_event, axis_ready, axis_data)
+        target=position,
+        args=(stop_event, position_channels, axis_ready, axis_data),
     )
 
     for cam_thread in camera_processes:
@@ -253,6 +341,10 @@ def main():
             time.sleep(0.01)
     except KeyboardInterrupt:
         stop_event.set()
+    axis_ready.set()
+    for event, queue in position_channels:
+        event.set()
+        queue.put(None)
 
     for cam_thread in camera_processes:
         cam_thread.join()

@@ -65,3 +65,5 @@ AXIS_COORDINATES = np.array(
     ],
     dtype=np.float32,
 )
+
+ARUCO_ID_LIMIT = 16
