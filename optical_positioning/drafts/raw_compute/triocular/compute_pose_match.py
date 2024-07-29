@@ -165,7 +165,8 @@ for i in range(3):
         axis_objp = np.array(axis_objp).reshape((-1, 3))
         triangulate_corners = np.array(triangulate_corners)
 
-        _, rvec, tvec = cv2.solvePnP(axis_objp, axis_corners, K_new, D)
+        # _, rvec, tvec = cv2.solvePnP(axis_objp, axis_corners, K_new, D)
+        _, rvec, tvec = cv2.solvePnP(axis_objp, axis_corners, K_new, None)
         r_1, _ = cv2.Rodrigues(rvec)
 
         triangulate_corners_all.append(triangulate_corners)

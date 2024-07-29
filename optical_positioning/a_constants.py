@@ -1,8 +1,8 @@
 import cv2
-import time
 import numpy as np
 
-CAMERAS = np.arange(3)
+N_CAMERAS = 3
+CAMERAS = np.arange(N_CAMERAS)
 FRAMERATE = 120
 
 
@@ -22,5 +22,46 @@ def camera_crop(frame):
     return frame[:, 240:1040]
 
 
+DIM = (800, 800)
+
+
 CALIBRATION_DIR = "optical_positioning/b_calibrate/"
 MATRIX_DIR = "optical_positioning/c_calibrate_matrix/"
+
+# shape: (aruco_id, 4, 3)
+AXIS_IDS = np.arange(5)
+AXIS_COORDINATES = np.array(
+    [
+        [
+            [0.00, 0.06, 0.00],
+            [0.06, 0.06, 0.00],
+            [0.06, 0.00, 0.00],
+            [0.00, 0.00, 0.00],
+        ],
+        [
+            [0.07, 0.06, 0.00],
+            [0.13, 0.06, 0.00],
+            [0.13, 0.00, 0.00],
+            [0.07, 0.00, 0.00],
+        ],
+        [
+            [0.00, 0.13, 0.00],
+            [0.06, 0.13, 0.00],
+            [0.06, 0.07, 0.00],
+            [0.00, 0.07, 0.00],
+        ],
+        [
+            [-0.07, 0.06, 0.00],
+            [-0.01, 0.06, 0.00],
+            [-0.01, 0.00, 0.00],
+            [-0.07, 0.00, 0.00],
+        ],
+        [
+            [0.00, -0.01, 0.00],
+            [0.06, -0.01, 0.00],
+            [0.06, -0.07, 0.00],
+            [0.00, -0.07, 0.00],
+        ],
+    ],
+    dtype=np.float32,
+)
