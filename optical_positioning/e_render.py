@@ -1,4 +1,5 @@
 import glfw
+import numpy as np
 
 from OpenGL.GL import *
 from OpenGL.GLU import *
@@ -8,6 +9,7 @@ pan_x, pan_y = 0.0, 0.0
 last_x, last_y = 0.0, 0.0
 dragging = False
 panning = False
+zoom_level = 1.0
 
 
 def mouse_button_callback(window, button, action, mods):
@@ -41,23 +43,43 @@ def mouse_callback(window, xpos, ypos):
     last_x, last_y = xpos, ypos
 
 
+def scroll_callback(window, xoffset, yoffset):
+    global zoom_level
+    zoom_factor = 0.1
+    if yoffset > 0:
+        zoom_level /= 1 + zoom_factor  # Zoom in
+    elif yoffset < 0:
+        zoom_level *= 1 + zoom_factor  # Zoom out
+
+
+T = np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]])
+
+
 def draw_axes():
     glBegin(GL_LINES)
 
-    # X axis (red)
     glColor3f(1.0, 0.0, 0.0)
-    glVertex3f(-1.0, 0.0, 0.0)
-    glVertex3f(1.0, 0.0, 0.0)
+    glVertex3f(*[0.0, 0.0, 0.0] @ T)
+    glVertex3f(*[1.0, 0.0, 0.0] @ T)
 
-    # Y axis (green)
     glColor3f(0.0, 1.0, 0.0)
-    glVertex3f(0.0, -1.0, 0.0)
-    glVertex3f(0.0, 1.0, 0.0)
+    glVertex3f(*[0.0, 0.0, 0.0] @ T)
+    glVertex3f(*[0.0, 1.0, 0.0] @ T)
 
-    # Z axis (blue)
     glColor3f(0.0, 0.0, 1.0)
-    glVertex3f(0.0, 0.0, -1.0)
-    glVertex3f(0.0, 0.0, 1.0)
+    glVertex3f(*[0.0, 0.0, 0.0] @ T)
+    glVertex3f(*[0.0, 0.0, 1.0] @ T)
+
+    glEnd()
+
+
+def draw_points(points):
+    glPointSize(10.0)
+    glBegin(GL_POINTS)
+
+    for point in points:
+        glColor3f(0.0, 0.0, 0.0)
+        glVertex3f(*point @ T)
 
     glEnd()
 
@@ -68,9 +90,7 @@ def init():
     if not glfw.init():
         raise Exception("GLFW could not be initialized.")
 
-    window = glfw.create_window(
-        800, 800, "Orthographic Axes with Mouse Drag and Pan", None, None
-    )
+    window = glfw.create_window(800, 800, "position", None, None)
     if not window:
         glfw.terminate()
         raise Exception("GLFW window could not be created.")
@@ -78,25 +98,31 @@ def init():
     glfw.make_context_current(window)
     glfw.set_cursor_pos_callback(window, mouse_callback)
     glfw.set_mouse_button_callback(window, mouse_button_callback)
+    glfw.set_scroll_callback(window, scroll_callback)
 
     last_x, last_y = glfw.get_cursor_pos(window)
-
-    glMatrixMode(GL_PROJECTION)
-    glLoadIdentity()
-    glOrtho(-1, 1, -0.5, 1.5, -1, 1)
-    glMatrixMode(GL_MODELVIEW)
-    glLoadIdentity()
 
     return window
 
 
+def window_should_close(window):
+    return glfw.window_should_close(window)
+
+
+def terminate():
+    glfw.terminate()
+
+
 def update(window, draw):
-    if glfw.window_should_close(window):
-        glfw.terminate()
-        return False
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
     glClearColor(0.96, 0.97, 0.97, 1.0)
+
+    glMatrixMode(GL_PROJECTION)
+    glLoadIdentity()
+    glOrtho(-zoom_level, zoom_level, -zoom_level, zoom_level, -1, 1)
+
+    glMatrixMode(GL_MODELVIEW)
     glLoadIdentity()
     glTranslatef(pan_x, pan_y, 0.0)
     glRotatef(angle_x, 1.0, 0.0, 0.0)
@@ -107,5 +133,3 @@ def update(window, draw):
 
     glfw.swap_buffers(window)
     glfw.poll_events()
-
-    return True

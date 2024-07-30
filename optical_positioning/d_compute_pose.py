@@ -1,13 +1,11 @@
 import time
 import itertools
 from multiprocessing import Process, Event, Queue
+from queue import Empty
 
 import cv2
 import numpy as np
 import scipy.optimize
-import matplotlib.pyplot as plt
-import matplotlib.animation as animation
-
 
 import a_constants
 import e_render
@@ -47,6 +45,9 @@ def camera(id, frame_event, stop_event, axis_channels, position_channels, axis_r
     cap = a_constants.camera_capture(id)
     while not stop_event.is_set():
         ret, frame = cap.read()
+        if not ret:
+            break
+
         frame = a_constants.camera_crop(frame)
         frame = cv2.remap(frame, map_1, map_2, interpolation=cv2.INTER_LINEAR)
         gray = frame[:, :, 0]
@@ -59,21 +60,22 @@ def camera(id, frame_event, stop_event, axis_channels, position_channels, axis_r
             axis_event, axis_queue = axis_channels[id]
             if not axis_event.is_set():
                 axis_event.set()
-                axis_queue.put((ids, corners, K))
+                axis_queue.put((ids, corners, K), block=False)
 
             if axis_ready.is_set():
                 position_event, position_queue = position_channels[id]
                 position_event.set()
-                position_queue.put((ids, corners))
+                position_queue.put((ids, corners), block=False)
 
-        if ret:
-            frame_event.set()
-            cv2.imshow(f"camera {id}", frame)
+        frame_event.set()
+        cv2.imshow(f"camera {id}", frame)
+
         key = cv2.waitKey(1) & 0xFF
         if key == ord("q"):
             stop_event.set()
 
     cap.release()
+    cv2.destroyWindow(f"camera {id}")
 
 
 def get_ids_intersection(ids_a, ids_b, bundle_a, bundle_b):
@@ -204,12 +206,14 @@ def axis(_, axis_channels, axis_ready, axis_data):
         stereo_points.append(points_ab)
 
     axis_ready.set()
-    axis_data.put((mono_proj_mat, mono_combinations, stereo_bundle_transform))
+    axis_data.put(
+        (mono_proj_mat, mono_combinations, stereo_bundle_transform), block=False
+    )
     print("axis ready")
     print()
 
 
-def position(stop_event, position_channels, axis_ready, axis_data):
+def position(stop_event, position_channels, axis_ready, axis_data, points_data):
     axis_ready.wait()
     mono_proj_mat, mono_combinations, stereo_bundle_transform = axis_data.get()
     markers_position = np.zeros((a_constants.ARUCO_ID_LIMIT, 4, 3), dtype=np.float32)
@@ -217,27 +221,6 @@ def position(stop_event, position_channels, axis_ready, axis_data):
     markers_map = np.zeros(a_constants.ARUCO_ID_LIMIT, dtype=np.bool)
 
     print("axis data acquired, positioning using axis")
-
-    plt.ion()
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection="3d")
-
-    scatter = ax.scatter([0], [0], [0], marker="^", color="black")
-
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
-    ax.set_zlabel("z")
-
-    axis_math = np.float32(
-        [[0, 0, 0], [0.05, 0, 0], [0, 0.05, 0], [0, 0, 0.05]]
-    ).reshape(-1, 3)
-    ax.quiver(*[0, 0, 0], *axis_math[1], color="red")
-    ax.quiver(*[0, 0, 0], *axis_math[2], color="green")
-    ax.quiver(*[0, 0, 0], *axis_math[3], color="blue")
-    plt.axis("equal")
-    ax.set_xlim([-0.25, 0.25])
-    ax.set_ylim([-0.25, 0.25])
-    ax.set_zlim([-0.25, 0.25])
 
     while not stop_event.is_set():
         mono_data = []
@@ -261,6 +244,9 @@ def position(stop_event, position_channels, axis_ready, axis_data):
                 np.array(corners_b),
             )
 
+            if len(ids_ab) == 0:
+                continue
+
             points_ab = get_points(
                 mono_proj_mat[a],
                 mono_proj_mat[b],
@@ -278,16 +264,38 @@ def position(stop_event, position_channels, axis_ready, axis_data):
             markers_map, np.newaxis, np.newaxis
         ]
 
-        scatter._offsets3d = markers_position[markers_map].reshape((-1, 3)).T
+        points_data.put((markers_position, markers_map), block=False)
 
-        fig.canvas.draw()
-        fig.canvas.flush_events()
+        for _, queue in position_channels:
+            while True:
+                try:
+                    queue.get_nowait()
+                except Empty:
+                    break
 
     stop_event.set()
 
 
-def render(stop_event, position_computed_channels):
-    pass
+def render(stop_event, points_data):
+    window = e_render.init()
+    scatter = None
+    while not stop_event.is_set() and not e_render.window_should_close(window):
+        while True:
+            try:
+                scatter = points_data.get_nowait()
+            except Empty:
+                break
+
+        def draw():
+            if scatter != None:
+                markers_position, markers_map = scatter
+                points = markers_position[markers_map].reshape((-1, 3))
+
+                e_render.draw_points(points)
+
+        e_render.update(window, draw)
+
+    e_render.terminate()
 
 
 def manager(frame_event, stop_event):
@@ -308,8 +316,6 @@ def manager(frame_event, stop_event):
         i += 1
         prev = t
 
-    cv2.destroyAllWindows()
-
 
 def main():
     stop_event = Event()
@@ -319,8 +325,8 @@ def main():
     axis_channels = [(Event(), Queue()) for _ in a_constants.CAMERAS]
     position_channels = [(Event(), Queue()) for _ in a_constants.CAMERAS]
 
-    axis_ready = Event()
-    axis_data = Queue()
+    axis_ready, axis_data = Event(), Queue()
+    points_data = Queue()
 
     camera_processes = [
         Process(
@@ -333,40 +339,40 @@ def main():
                 position_channels,
                 axis_ready,
             ),
+            daemon=True,
         )
         for cam_id in a_constants.CAMERAS
     ]
 
     axis_process = Process(
-        target=axis, args=(stop_event, axis_channels, axis_ready, axis_data)
+        target=axis,
+        args=(stop_event, axis_channels, axis_ready, axis_data),
+        daemon=True,
     )
     position_process = Process(
         target=position,
-        args=(stop_event, position_channels, axis_ready, axis_data),
+        args=(stop_event, position_channels, axis_ready, axis_data, points_data),
+        daemon=True,
     )
-    render_process = Process()
+    render_process = Process(target=render, args=(stop_event, points_data), daemon=True)
 
     for cam_thread in camera_processes:
         cam_thread.start()
     manager_process.start()
     axis_process.start()
     position_process.start()
+    render_process.start()
 
     try:
         while not stop_event.is_set():
             time.sleep(0.01)
     except KeyboardInterrupt:
         stop_event.set()
+    frame_event.set()
     axis_ready.set()
     for event, queue in position_channels:
         event.set()
-        queue.put(None)
-
-    for cam_thread in camera_processes:
-        cam_thread.join()
-    manager_process.join()
-    axis_process.join()
-    position_process.join()
+        queue.put(None, block=False)
 
 
 if __name__ == "__main__":
