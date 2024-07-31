@@ -1,6 +1,6 @@
 import struct
 from queue import Empty
-from multiprocessing import Process, Queue
+from multiprocessing import Process, Pipe, Queue, Event
 
 import time
 import serial
@@ -224,14 +224,18 @@ def no_block_wait(event, secs):
 
 
 def empty_queue(queue):
+    recv = None
     while True:
         try:
-            queue.get_nowait()
+            recv = queue.get_nowait()
         except Empty:
             break
+    return recv
 
 
-def processing(stop_event, points_data, processing_queue):
+def processing(
+    stop_event, points_data, processing_queue, evaluate_event, evaluate_pipe
+):
     ser = serial.Serial(port="COM6", baudrate=115200, dsrdtr=True)
 
     send_packet(ser, packet_t(cmd=commands.RESET))
@@ -264,22 +268,81 @@ def processing(stop_event, points_data, processing_queue):
         except Empty:
             continue
 
-        if initial_point != None:
-            center_point = initial_point
-            target_point = initial_point + [0.05, 0.025, 0.0]
+        if type(initial_point) == type(None):
+            initial_point = center_point
+            target_point = initial_point + [0.1, 0.00, 0.00]
+            print(f"processing sent target: {target_point}")
+            evaluate_pipe.send(target_point)
 
-            # def objective(vector):
+        if evaluate_event.is_set():
+            evaluate_event.clear()
+            vector_recv = evaluate_pipe.recv()
+            print(f"processing evaluate {vector_recv}")
+            vector = [*vector_recv, 0, 0, 0, 0, 0, 0]
+            vector = np.clip(vector, 0, 180).astype(np.uint8)
+
+            send_packet(
+                ser,
+                packet_t(buffer=struct.pack("<9B", *vector), cmd=commands.MOVE_SERVO),
+            )
+            print("processing packet sent")
+            no_block_wait(stop_event, 1.0)
+            pos = empty_queue(processing_queue)
+            print(f"processing get most recent pos: {pos}")
+            evaluate_pipe.send(pos)
 
     ser.close()
 
 
+def optimize(stop_event, evaluate_event, evaluate_pipe):
+    target_point = evaluate_pipe.recv()
+
+    x0 = np.array([0.0, 0.0, 0.0])
+    print(f"initial guess: {x0}")
+
+    def objective(vector):
+        print(f"optimize evaluate {vector}")
+        evaluate_event.set()
+        evaluate_pipe.send(vector)
+        center_point = evaluate_pipe.recv()
+        print(f"optimize recv {center_point}")
+        return np.mean((target_point - center_point) ** 2)
+
+    # Perform the optimization
+    result = scipy.optimize.minimize(
+        objective, x0, method="Powell", bounds=[(0, 180), (0, 180), (0, 180)]
+    )
+
+    print("The minimum is at:", result.x)
+    print("Minimum value of the objective function:", result.fun)
+
+
 def setup(stop_event, points_data):
+    evaluate_event, (evaluate_pipe_0, evaluate_pipe_1) = Event(), Pipe()
     processing_queue = Queue()
 
-    return Process(
-        target=rendering, args=(stop_event, points_data, processing_queue), daemon=True
-    ), Process(
-        target=processing, args=(stop_event, points_data, processing_queue), daemon=True
+    return (
+        Process(
+            target=rendering,
+            args=(stop_event, points_data, processing_queue),
+            daemon=True,
+        ),
+        Process(
+            target=processing,
+            args=(
+                stop_event,
+                points_data,
+                processing_queue,
+                evaluate_event,
+                evaluate_pipe_0,
+            ),
+            daemon=True,
+        ),
+        Process(
+            target=optimize,
+            args=(stop_event, evaluate_event, evaluate_pipe_1),
+            daemon=True,
+        ),
     )
 
 

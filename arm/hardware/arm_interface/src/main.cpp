@@ -40,9 +40,9 @@ const int trim_max[n_servos] = {
     2400, 2400, 2400,
     2400, 2400, 2400};
 const uint8_t home_angle[n_servos] = {
-    90, 90, 90,
-    90, 90, 90,
-    90, 90, 90};
+    0,0,0,
+    0,0,0,
+    0,0,0};
 
 Servo servos[n_servos];
 volatile boolean servo_ready = false;

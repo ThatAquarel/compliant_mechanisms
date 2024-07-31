@@ -12,7 +12,7 @@ def objective_function(vector):
 initial_guess = [0.0, 0.0, 0.0]
 
 # Perform the optimization
-result = minimize(objective_function, initial_guess, method="Nelder-Mead")
+result = minimize(objective_function, initial_guess, method="Powell")
 
 print("The minimum is at:", result.x)
 print("Minimum value of the objective function:", result.fun)
