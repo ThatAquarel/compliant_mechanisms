@@ -83,15 +83,6 @@ send_packet(
 )
 print(recv_packet(ser).cmd)
 
-send_packet(
-    ser,
-    packet_t(
-        buffer=struct.pack("<9B", [156, 83, 53, 0, 0, 0, 0, 0, 0]),
-        cmd=commands.MOVE_SERVO,
-    ),
-)
-print(recv_packet(ser).cmd)
-
 # 155.52556244  83.06176747  52.6081013
 
 # MOVE_CARRIAGE 1000

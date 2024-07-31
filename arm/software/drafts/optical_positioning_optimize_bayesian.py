@@ -6,7 +6,7 @@ import time
 import serial
 import imgui
 import numpy as np
-from bayes_opt import BayesianOptimization
+import scipy.optimize
 from OpenGL.GL import *
 
 from optical_positioning import d_compute_pose as optical_pose
@@ -270,7 +270,7 @@ def processing(
 
         if type(initial_point) == type(None):
             initial_point = center_point
-            target_point = initial_point + [0.0, 0.0, 0.0]
+            target_point = initial_point + [0.1, 0.00, 0.00]
             print(f"processing sent target: {target_point}")
             evaluate_pipe.send(target_point)
 
@@ -278,7 +278,7 @@ def processing(
             evaluate_event.clear()
             vector_recv = evaluate_pipe.recv()
             print(f"processing evaluate {vector_recv}")
-            vector = vector_recv
+            vector = [*vector_recv, 0, 0, 0, 0, 0, 0]
             vector = np.clip(vector, 0, 180).astype(np.uint8)
 
             send_packet(
@@ -297,39 +297,24 @@ def processing(
 def optimize(stop_event, evaluate_event, evaluate_pipe):
     target_point = evaluate_pipe.recv()
 
-    def objective(a, b, c, d, e, f, g, h, i):
-        print(f"optimize evaluate {[a,b,c]}")
+    x0 = np.array([0.0, 0.0, 0.0])
+    print(f"initial guess: {x0}")
+
+    def objective(vector):
+        print(f"optimize evaluate {vector}")
         evaluate_event.set()
-        evaluate_pipe.send([a, b, c, d, e, f, g, h, i])
+        evaluate_pipe.send(vector)
         center_point = evaluate_pipe.recv()
         print(f"optimize recv {center_point}")
-        mse = np.mean((target_point - center_point) ** 2)
-        return 1 / mse
+        return np.mean((target_point - center_point) ** 2)
 
     # Perform the optimization
-    pbounds = {
-        "a": (0, 180),
-        "b": (0, 180),
-        "c": (0, 180),
-        "d": (0, 180),
-        "e": (0, 180),
-        "f": (0, 180),
-        "g": (0, 180),
-        "h": (0, 180),
-        "i": (0, 180),
-    }
-    optimizer = BayesianOptimization(
-        f=objective,
-        pbounds=pbounds,
-        random_state=1,
+    result = scipy.optimize.minimize(
+        objective, x0, method="Powell", bounds=[(0, 180), (0, 180), (0, 180)]
     )
 
-    optimizer.maximize(init_points=10, n_iter=20)
-
-    print("move to max")
-    objective(**optimizer.max["params"])
-
-    ...
+    print("The minimum is at:", result.x)
+    print("Minimum value of the objective function:", result.fun)
 
 
 def setup(stop_event, points_data):
