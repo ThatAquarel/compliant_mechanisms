@@ -1,6 +1,9 @@
 import glfw
 import numpy as np
 
+import imgui
+from imgui.integrations.glfw import GlfwRenderer
+
 from OpenGL.GL import *
 from OpenGL.GLU import *
 
@@ -10,10 +13,15 @@ last_x, last_y = 0.0, 0.0
 dragging = False
 panning = False
 zoom_level = 1.0
+imgui_impl = None
 
 
 def mouse_button_callback(window, button, action, mods):
-    global dragging, panning
+    global dragging, panning, imgui_impl
+
+    if imgui_impl != None and imgui.get_io().want_capture_mouse:
+        return
+
     if button == glfw.MOUSE_BUTTON_LEFT:
         if action == glfw.PRESS:
             dragging = True
@@ -29,8 +37,12 @@ def mouse_button_callback(window, button, action, mods):
             panning = False
 
 
-def mouse_callback(window, xpos, ypos):
-    global last_x, last_y, angle_x, angle_y, pan_x, pan_y, dragging, panning
+def cursor_pos_callback(window, xpos, ypos):
+    global last_x, last_y, angle_x, angle_y, pan_x, pan_y, dragging, panning, imgui_impl
+
+    if imgui_impl != None and imgui.get_io().want_capture_mouse:
+        return
+
     if dragging:
         dx = xpos - last_x
         dy = ypos - last_y
@@ -44,7 +56,11 @@ def mouse_callback(window, xpos, ypos):
 
 
 def scroll_callback(window, xoffset, yoffset):
-    global zoom_level
+    global zoom_level, imgui_impl
+
+    if imgui_impl != None and imgui.get_io().want_capture_mouse:
+        return
+
     zoom_factor = 0.1
     if yoffset > 0:
         zoom_level /= 1 + zoom_factor  # Zoom in
@@ -112,13 +128,20 @@ def init():
         raise Exception("GLFW window could not be created.")
 
     glfw.make_context_current(window)
-    glfw.set_cursor_pos_callback(window, mouse_callback)
+    glfw.set_cursor_pos_callback(window, cursor_pos_callback)
     glfw.set_mouse_button_callback(window, mouse_button_callback)
     glfw.set_scroll_callback(window, scroll_callback)
 
     last_x, last_y = glfw.get_cursor_pos(window)
 
     return window
+
+
+def init_imgui(window):
+    global imgui_impl
+    imgui.create_context()
+    imgui_impl = GlfwRenderer(window, attach_callbacks=False)
+    return imgui_impl
 
 
 def window_should_close(window):
