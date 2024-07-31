@@ -105,12 +105,17 @@ def draw_axes():
     glEnd()
 
 
+aruco_point_color = np.array(
+    [[0.92, 0.26, 0.21], [0.20, 0.66, 0.33], [0.26, 0.52, 0.96], [0.98, 0.74, 0.02]]
+)
+
+
 def draw_points(points):
-    glPointSize(2.0)
+    glPointSize(4.0)
     glBegin(GL_POINTS)
 
-    for point in points:
-        glColor3f(0.0, 0.0, 0.0)
+    for i, point in enumerate(points):
+        glColor3f(*aruco_point_color[i % aruco_point_color.shape[0]])
         glVertex3f(*point @ T)
 
     glEnd()

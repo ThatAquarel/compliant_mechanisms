@@ -8,15 +8,18 @@ PAGE_SIZE_INCH = 11, 8.5
 page_size = np.multiply(PAGE_SIZE_INCH, PIXELS_PER_INCH).astype(np.int32)
 output = np.ones((*page_size, 3), dtype=np.uint8) * 255
 
-MARGIN = 1  # cm
-ARUCO_INDICES = np.arange(20) + 16
-ARUCO_WIDTH = 4  # cm
+MARGIN = 0.5  # cm
+# ARUCO_INDICES = np.arange(24) + 8
+ARUCO_INDICES = np.arange(24) + 20
+ARUCO_WIDTH = 5  # cm
 
 margin = int(MARGIN * PIXELS_PER_CM)
+h_margin = int()
 aruco_pixels = int(ARUCO_WIDTH * PIXELS_PER_CM)
 aruco_len = aruco_pixels + margin
 
 aruco_nx, aruco_ny = np.divide(page_size, aruco_len).astype(np.int32)
+aruco_nx = 4
 
 for i, n in enumerate(ARUCO_INDICES):
     marker = cv2.imread(
@@ -26,7 +29,7 @@ for i, n in enumerate(ARUCO_INDICES):
 
     xi, yi = i % aruco_nx, i // aruco_nx
     if yi >= aruco_ny:
-        print(f"skip {i}")
+        print(f"skip {n}")
         continue
 
     xi, yi = xi * aruco_len, yi * aruco_len
