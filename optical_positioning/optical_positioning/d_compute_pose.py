@@ -276,7 +276,7 @@ def position(stop_event, position_channels, axis_ready, axis_data, points_data):
     stop_event.set()
 
 
-def render(stop_event, points_data):
+def rendering(stop_event, points_data, processing_queue):
     window = e_render.init()
     scatter = None
     while not stop_event.is_set() and not e_render.window_should_close(window):
@@ -298,6 +298,10 @@ def render(stop_event, points_data):
     e_render.terminate()
 
 
+def processing(stop_event, points_data, processing_queue):
+    pass
+
+
 def manager(frame_event, stop_event):
     prev = 0
     i = 0
@@ -317,7 +321,7 @@ def manager(frame_event, stop_event):
         prev = t
 
 
-def main():
+def main(setup):
     stop_event = Event()
     frame_event = Event()
     manager_process = Process(target=manager, args=(frame_event, stop_event))
@@ -355,14 +359,18 @@ def main():
         daemon=True,
     )
 
-    render_process = Process(target=render, args=(stop_event, points_data), daemon=True)
+    processing_queue = Queue()
+    rendering_process, processing_process = setup(
+        stop_event, points_data, processing_queue
+    )
 
     for cam_thread in camera_processes:
         cam_thread.start()
     manager_process.start()
     axis_process.start()
     position_process.start()
-    render_process.start()
+    rendering_process.start()
+    processing_process.start()
 
     try:
         while not stop_event.is_set():
@@ -376,5 +384,13 @@ def main():
         queue.put(None, block=False)
 
 
+def _setup(stop_event, points_data, processing_queue):
+    return Process(
+        target=rendering, args=(stop_event, points_data, processing_queue), daemon=True
+    ), Process(
+        target=processing, args=(stop_event, points_data, processing_queue), daemon=True
+    )
+
+
 if __name__ == "__main__":
-    main()
+    main(_setup)
