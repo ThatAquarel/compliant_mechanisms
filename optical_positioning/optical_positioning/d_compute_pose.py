@@ -359,9 +359,8 @@ def main(setup):
         daemon=True,
     )
 
-    processing_queue = Queue()
-    rendering_process, processing_process = setup(
-        stop_event, points_data, processing_queue
+    setup_processes = setup(
+        stop_event, points_data
     )
 
     for cam_thread in camera_processes:
@@ -369,8 +368,8 @@ def main(setup):
     manager_process.start()
     axis_process.start()
     position_process.start()
-    rendering_process.start()
-    processing_process.start()
+    for process in setup_processes:
+        process.start()
 
     try:
         while not stop_event.is_set():
@@ -384,7 +383,9 @@ def main(setup):
         queue.put(None, block=False)
 
 
-def _setup(stop_event, points_data, processing_queue):
+def _setup(stop_event, points_data):
+    processing_queue = Queue()
+
     return Process(
         target=rendering, args=(stop_event, points_data, processing_queue), daemon=True
     ), Process(

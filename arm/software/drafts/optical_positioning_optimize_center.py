@@ -1,6 +1,6 @@
 import struct
 from queue import Empty
-from multiprocessing import Process
+from multiprocessing import Process, Queue
 
 import time
 import serial
@@ -264,18 +264,18 @@ def processing(stop_event, points_data, processing_queue):
         except Empty:
             continue
 
-        if initial_point == None:
+        if initial_point != None:
             center_point = initial_point
             target_point = initial_point + [0.05, 0.025, 0.0]
 
             # def objective(vector):
 
-
-
     ser.close()
 
 
-def setup(stop_event, points_data, processing_queue):
+def setup(stop_event, points_data):
+    processing_queue = Queue()
+
     return Process(
         target=rendering, args=(stop_event, points_data, processing_queue), daemon=True
     ), Process(
