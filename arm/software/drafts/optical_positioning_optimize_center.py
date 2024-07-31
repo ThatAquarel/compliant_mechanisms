@@ -1,6 +1,9 @@
+import struct
 from queue import Empty
 from multiprocessing import Process
 
+import time
+import serial
 import imgui
 import numpy as np
 import scipy.optimize
@@ -8,6 +11,58 @@ from OpenGL.GL import *
 
 from optical_positioning import d_compute_pose as optical_pose
 from optical_positioning import e_render as optical_render
+
+
+class commands:
+    NUL = 0x00
+
+    SYN = 0xAB
+    ACK = 0x4B
+    NAK = 0x5A
+    ERR = 0x3C
+
+    RESET = 0x01
+    HOME_CARRIAGE = 0x02
+    HOME_SERVO = 0x03
+    MOVE_CARRIAGE = 0x04
+    MOVE_SERVO = 0x05
+
+
+class packet_t:
+    cmd = 0
+    buffer = 0
+
+    def __init__(self, buffer=b"", cmd=commands.NUL):
+        self.buffer = buffer
+        self.cmd = cmd
+
+
+def send_packet(ser_handle, packet: packet_t):
+    packet_bytes = struct.pack(
+        f"<xBBB{len(packet.buffer)}sBx",
+        0x7E,  # U8 start of packet flag
+        packet.cmd & 0xFF,  # U8 command
+        len(packet.buffer) & 0xFF,  # U8 length of payload
+        packet.buffer,  # U8 payload[len]
+        0x7D,  # U8 end of packet flag
+    )
+
+    print(packet_bytes)
+    ser_handle.write(packet_bytes)
+
+
+def recv_packet(ser_handle):
+    ser_handle.read_until(b"\x7E")
+
+    command, length = struct.unpack("<cB", ser_handle.read(2))
+    payload = b""
+    if length:
+        payload = struct.unpack(f"<{length}s", ser_handle.read(length))
+
+    if ser_handle.read(1) != b"\x7D":
+        print("serial frame end error")
+
+    return packet_t(payload, ord(command))
 
 
 center_find = np.array(
@@ -126,6 +181,8 @@ def rendering(stop_event, points_data, processing_queue):
                     transform_points(center_find_tip, center_T) @ optical_render.T
                 )
 
+                processing_queue.put(center_point)
+
                 glPointSize(6.0)
                 glBegin(GL_POINTS)
                 glColor4f(*center_color)
@@ -160,8 +217,62 @@ def rendering(stop_event, points_data, processing_queue):
     optical_render.terminate()
 
 
+def no_block_wait(event, secs):
+    start = time.time()
+    while not event.is_set() and (time.time() - start) < secs:
+        pass
+
+
+def empty_queue(queue):
+    while True:
+        try:
+            queue.get_nowait()
+        except Empty:
+            break
+
+
 def processing(stop_event, points_data, processing_queue):
-    print("processing started")
+    ser = serial.Serial(port="COM6", baudrate=115200, dsrdtr=True)
+
+    send_packet(ser, packet_t(cmd=commands.RESET))
+    assert recv_packet(ser).cmd == commands.ACK
+
+    send_packet(ser, packet_t(cmd=commands.HOME_CARRIAGE))
+    assert recv_packet(ser).cmd == commands.ACK
+
+    send_packet(ser, packet_t(cmd=commands.HOME_SERVO))
+    assert recv_packet(ser).cmd == commands.ACK
+
+    print("hardware reset")
+
+    carriage_ready = False
+    while not carriage_ready:
+        no_block_wait(stop_event, 0.05)
+        send_packet(
+            ser, packet_t(buffer=struct.pack("<f", 0.0), cmd=commands.MOVE_CARRIAGE)
+        )
+        carriage_ready = recv_packet(ser).cmd != commands.ERR
+    print("hardware ready")
+
+    empty_queue(processing_queue)
+    print("processing queue realtime")
+
+    initial_point = None
+    while not stop_event.is_set():
+        try:
+            center_point = processing_queue.get_nowait()
+        except Empty:
+            continue
+
+        if initial_point == None:
+            center_point = initial_point
+            target_point = initial_point + [0.05, 0.025, 0.0]
+
+            # def objective(vector):
+
+
+
+    ser.close()
 
 
 def setup(stop_event, points_data, processing_queue):
