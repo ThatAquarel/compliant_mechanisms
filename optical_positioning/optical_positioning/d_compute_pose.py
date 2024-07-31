@@ -97,6 +97,13 @@ def homogenize(points):
     return np.hstack((points, w))
 
 
+def transform_mse(T, x, y):
+    T = T.reshape((4, 3))
+    xT = x @ T
+    se = (xT - y) ** 2
+    mse = np.mean(se, axis=1)
+    return mse
+
 def axis(_, axis_channels, axis_ready, axis_data):
     print("axis solve")
 
@@ -169,13 +176,6 @@ def axis(_, axis_channels, axis_ready, axis_data):
             )
             points_base = homogenize(points_base.reshape((-1, 3)))
             points_ab = points_ab.reshape((-1, 3))
-
-            def transform_mse(T, x, y):
-                T = T.reshape((4, 3))
-                xT = x @ T
-                se = (xT - y) ** 2
-                mse = np.mean(se, axis=1)
-                return mse
 
             def eval(T):
                 mse = np.mean(transform_mse(T, points_base, points_ab))
