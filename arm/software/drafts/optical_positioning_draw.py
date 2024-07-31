@@ -2,16 +2,19 @@ from queue import Empty
 from multiprocessing import Process
 
 import imgui
-from OpenGL.GL import glBegin, glEnd, GL_TRIANGLE_FAN, glColor4f, glVertex3f
+from OpenGL.GL import *
 
 from optical_positioning import d_compute_pose as optical_pose
 from optical_positioning import e_render as optical_render
 
 
 def draw_aruco_surface(markers_position):
+    glEnable(GL_BLEND)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+
     for marker in markers_position:
         glBegin(GL_TRIANGLE_FAN)
-        glColor4f(0.7, 0.7, 0.7, 0.2)
+        glColor4f(1.0, 1.0, 1.0, 0.5)
         for point in marker:
             glVertex3f(*point @ optical_render.T)
 
