@@ -1,1 +1,3 @@
 optical_positioning/drafts/aruco/markers/*
+**/__pycache__/*
+**/optical_positioning.egg-info/

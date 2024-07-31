@@ -3,7 +3,7 @@ import time
 import cv2
 import numpy as np
 
-import a_constants as a_constants
+import optical_positioning.a_constants as a_constants
 
 
 def calibrate():

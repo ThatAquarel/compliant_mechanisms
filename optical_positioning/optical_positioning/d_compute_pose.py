@@ -7,8 +7,8 @@ import cv2
 import numpy as np
 import scipy.optimize
 
-import a_constants
-import e_render
+import optical_positioning.a_constants as a_constants
+import optical_positioning.e_render as e_render
 
 
 def undistort_map(K, D):
@@ -354,6 +354,7 @@ def main():
         args=(stop_event, position_channels, axis_ready, axis_data, points_data),
         daemon=True,
     )
+
     render_process = Process(target=render, args=(stop_event, points_data), daemon=True)
 
     for cam_thread in camera_processes:
