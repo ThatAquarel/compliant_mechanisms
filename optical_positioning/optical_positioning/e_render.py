@@ -4,7 +4,7 @@ import numpy as np
 from OpenGL.GL import *
 from OpenGL.GLU import *
 
-angle_x, angle_y = 0.0, 0.0
+angle_x, angle_y = 45.0, 45.0
 pan_x, pan_y = 0.0, 0.0
 last_x, last_y = 0.0, 0.0
 dragging = False
@@ -55,26 +55,42 @@ def scroll_callback(window, xoffset, yoffset):
 T = np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]])
 
 
+_axes_y = np.mgrid[0:2, 0:1:11j, 0:1].T.reshape((-1, 3)) - [0.5, 0.5, 0.0]
+_axes_x = _axes_y[:, [1, 0, 2]]
+
+
 def draw_axes():
+    glLineWidth(1.0)
+    glBegin(GL_LINES)
+
+    # glColor3f(0.0, 0.0, 0.0)
+    glColor3f(1.0, 1.0, 1.0)
+    for point in _axes_x:
+        glVertex3f(*(point) @ T)
+    for point in _axes_y:
+        glVertex3f(*point @ T)
+    glEnd()
+
+    glLineWidth(2.0)
     glBegin(GL_LINES)
 
     glColor3f(1.0, 0.0, 0.0)
-    glVertex3f(*[0.0, 0.0, 0.0] @ T)
-    glVertex3f(*[1.0, 0.0, 0.0] @ T)
+    glVertex3f(*[-0.5, 0.0, 0.0] @ T)
+    glVertex3f(*[0.5, 0.0, 0.0] @ T)
 
     glColor3f(0.0, 1.0, 0.0)
-    glVertex3f(*[0.0, 0.0, 0.0] @ T)
-    glVertex3f(*[0.0, 1.0, 0.0] @ T)
+    glVertex3f(*[0.0, -0.5, 0.0] @ T)
+    glVertex3f(*[0.0, 0.5, 0.0] @ T)
 
     glColor3f(0.0, 0.0, 1.0)
-    glVertex3f(*[0.0, 0.0, 0.0] @ T)
-    glVertex3f(*[0.0, 0.0, 1.0] @ T)
+    glVertex3f(*[0.0, 0.0, -0.5] @ T)
+    glVertex3f(*[0.0, 0.0, 0.5] @ T)
 
     glEnd()
 
 
 def draw_points(points):
-    glPointSize(10.0)
+    glPointSize(2.0)
     glBegin(GL_POINTS)
 
     for point in points:
@@ -116,7 +132,7 @@ def terminate():
 def update(window, draw):
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-    glClearColor(0.96, 0.97, 0.97, 1.0)
+    glClearColor(0.86, 0.87, 0.87, 1.0)
 
     glMatrixMode(GL_PROJECTION)
     glLoadIdentity()
