@@ -1,5 +1,5 @@
 from queue import Empty
-from multiprocessing import Process
+from multiprocessing import Process, Queue
 
 import imgui
 import numpy as np
@@ -164,7 +164,9 @@ def processing(stop_event, points_data, processing_queue):
     print("processing started")
 
 
-def setup(stop_event, points_data, processing_queue):
+def setup(stop_event, points_data):
+    processing_queue = Queue()
+
     return Process(
         target=rendering, args=(stop_event, points_data, processing_queue), daemon=True
     ), Process(
