@@ -1,13 +1,66 @@
+import time
+import struct
 from queue import Empty
 from multiprocessing import Process, Queue
 
 import imgui
+import serial
 import numpy as np
-import scipy.optimize
 from OpenGL.GL import *
 
 from optical_positioning import d_compute_pose as optical_pose
 from optical_positioning import e_render as optical_render
+
+
+class commands:
+    NUL = 0x00
+
+    SYN = 0xAB
+    ACK = 0x4B
+    NAK = 0x5A
+    ERR = 0x3C
+
+    RESET = 0x01
+    HOME_CARRIAGE = 0x02
+    HOME_SERVO = 0x03
+    MOVE_CARRIAGE = 0x04
+    MOVE_SERVO = 0x05
+
+
+class packet_t:
+    cmd = 0
+    buffer = 0
+
+    def __init__(self, buffer=b"", cmd=commands.NUL):
+        self.buffer = buffer
+        self.cmd = cmd
+
+
+def send_packet(ser_handle, packet: packet_t):
+    packet_bytes = struct.pack(
+        f"<xBBB{len(packet.buffer)}sBx",
+        0x7E,  # U8 start of packet flag
+        packet.cmd & 0xFF,  # U8 command
+        len(packet.buffer) & 0xFF,  # U8 length of payload
+        packet.buffer,  # U8 payload[len]
+        0x7D,  # U8 end of packet flag
+    )
+
+    ser_handle.write(packet_bytes)
+
+
+def recv_packet(ser_handle):
+    ser_handle.read_until(b"\x7E")
+
+    command, length = struct.unpack("<cB", ser_handle.read(2))
+    payload = b""
+    if length:
+        payload = struct.unpack(f"<{length}s", ser_handle.read(length))
+
+    if ser_handle.read(1) != b"\x7D":
+        print("serial frame end error")
+
+    return packet_t(payload, ord(command))
 
 
 center_find = np.array(
@@ -86,9 +139,18 @@ def draw_aruco_surface(markers_position):
         glEnd()
 
 
+carriage_position = 0
+servos_position = np.zeros(9, dtype=np.uint8)
+frame_time = 0
+frame_count = 0
+frame_dt = 0
+fps = 0
+
+
 def rendering(stop_event, points_data, processing_queue):
     window = optical_render.init()
     imgui_impl = optical_render.init_imgui(window)
+    imgui.style_colors_light()
 
     scatter = None
     while not stop_event.is_set() and not optical_render.window_should_close(window):
@@ -99,6 +161,80 @@ def rendering(stop_event, points_data, processing_queue):
                 break
 
         def draw():
+            global carriage_position, servos_position, frame_time, frame_count, frame_dt, fps
+            t = time.time()
+            frame_dt += t - frame_time
+            frame_time = t
+            frame_count += 1
+
+            if frame_count == 10:
+                dt = frame_dt / 10
+                fps = 1 / dt
+
+                frame_dt = 0
+                frame_count = 0
+
+            imgui.new_frame()
+            imgui.begin("controls")
+
+            imgui.text("render")
+            imgui.separator()
+            imgui.text(f"fps: {fps:.4f}")
+
+            if imgui.button("print positions"):
+                print(f"servos positions: {repr(servos_position)}")
+                print(f"carriage position: {repr(carriage_position)}")
+
+            imgui.spacing()
+            imgui.spacing()
+
+            imgui.text("mechanical")
+            imgui.separator()
+            imgui.same_line()
+            if imgui.button("home carriage"):
+                processing_queue.put(packet_t(cmd=commands.HOME_CARRIAGE))
+            imgui.same_line()
+            if imgui.button("home servos"):
+                processing_queue.put(packet_t(cmd=commands.HOME_SERVO))
+            imgui.same_line()
+            if imgui.button("reset"):
+                processing_queue.put(packet_t(cmd=commands.RESET))
+
+            imgui.spacing()
+            imgui.spacing()
+
+            imgui.text("servos (deg)")
+            servo_changed = False
+            for i, servo in enumerate(servos_position):
+                if i % 3 == 0:
+                    imgui.separator()
+                stat, servos_position[i] = imgui.slider_int(f"{i}", servo, 0, 180)
+                servo_changed |= stat
+            if servo_changed:
+                servo_buffer = struct.pack("<9B", *servos_position)
+                packet = packet_t(buffer=servo_buffer, cmd=commands.MOVE_SERVO)
+                processing_queue.put(packet)
+
+            imgui.spacing()
+            imgui.spacing()
+
+            imgui.text("carriage (mm)")
+            imgui.separator()
+            carriage_changed, carriage_position = imgui.slider_float(
+                "", carriage_position, 0.0, 300.0
+            )
+            if carriage_changed:
+                steps_per_mm = 1000 / (60 * 2)
+                carriage_buffer = struct.pack("<f", carriage_position * steps_per_mm)
+                packet = packet_t(buffer=carriage_buffer, cmd=commands.MOVE_CARRIAGE)
+                processing_queue.put(packet)
+
+            imgui.end()
+
+            imgui.render()
+            imgui_impl.process_inputs()
+            imgui_impl.render(imgui.get_draw_data())
+
             if scatter != None:
                 markers_position, markers_map = scatter
                 points = markers_position[markers_map].reshape((-1, 3))
@@ -146,14 +282,6 @@ def rendering(stop_event, points_data, processing_queue):
                 draw_aruco_surface(markers_position[markers_map])
                 optical_render.draw_points(points)
 
-            imgui.new_frame()
-            imgui.begin("ImGui Window")
-            imgui.text("Hello, world!")
-            imgui.end()
-            imgui.render()
-            imgui_impl.process_inputs()
-            imgui_impl.render(imgui.get_draw_data())
-
         optical_render.update(window, draw)
 
     imgui_impl.shutdown()
@@ -161,7 +289,23 @@ def rendering(stop_event, points_data, processing_queue):
 
 
 def processing(stop_event, points_data, processing_queue):
-    print("processing started")
+    try:
+        ser = serial.Serial(port="COM6", baudrate=115200, dsrdtr=True)
+    except serial.SerialException:
+        print(f"serial connection failure")
+        return
+
+    while not stop_event.is_set():
+        try:
+            packet = processing_queue.get_nowait()
+        except Empty:
+            continue
+
+        send_packet(ser, packet)
+        ret = recv_packet(ser).cmd
+        if ret != commands.ACK:
+            print(f"packet sent error: {packet.cmd}")
+            print(f"packet recv status: {ret}")
 
 
 def setup(stop_event, points_data):

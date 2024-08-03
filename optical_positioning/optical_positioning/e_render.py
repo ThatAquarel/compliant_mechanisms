@@ -14,6 +14,8 @@ dragging = False
 panning = False
 zoom_level = 1.0
 imgui_impl = None
+viewport_left = 0
+viewport_right = 0
 
 
 def mouse_button_callback(window, button, action, mods):
@@ -66,6 +68,15 @@ def scroll_callback(window, xoffset, yoffset):
         zoom_level /= 1 + zoom_factor  # Zoom in
     elif yoffset < 0:
         zoom_level *= 1 + zoom_factor  # Zoom out
+
+
+def resize_callback(window, width, height):
+    glViewport(0, 0, width, height)
+
+    global viewport_left, viewport_right
+    aspect_ratio = width / height if height > 0 else 1.0
+    viewport_left = -aspect_ratio
+    viewport_right = aspect_ratio
 
 
 T = np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]])
@@ -122,12 +133,14 @@ def draw_points(points):
 
 
 def init():
+    window_size = (800, 800)
+
     global last_x, last_y
 
     if not glfw.init():
         raise Exception("GLFW could not be initialized.")
 
-    window = glfw.create_window(800, 800, "position", None, None)
+    window = glfw.create_window(*window_size, "position", None, None)
     if not window:
         glfw.terminate()
         raise Exception("GLFW window could not be created.")
@@ -136,8 +149,11 @@ def init():
     glfw.set_cursor_pos_callback(window, cursor_pos_callback)
     glfw.set_mouse_button_callback(window, mouse_button_callback)
     glfw.set_scroll_callback(window, scroll_callback)
+    glfw.set_framebuffer_size_callback(window, resize_callback)
 
     last_x, last_y = glfw.get_cursor_pos(window)
+
+    resize_callback(window, *window_size)
 
     return window
 
@@ -158,13 +174,21 @@ def terminate():
 
 
 def update(window, draw):
+    global viewport_left, viewport_right
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
     glClearColor(0.86, 0.87, 0.87, 1.0)
 
     glMatrixMode(GL_PROJECTION)
     glLoadIdentity()
-    glOrtho(-zoom_level, zoom_level, -zoom_level, zoom_level, -1, 1)
+    glOrtho(
+        viewport_left * zoom_level,
+        viewport_right * zoom_level,
+        -zoom_level,
+        zoom_level,
+        -1,
+        1,
+    )
 
     glMatrixMode(GL_MODELVIEW)
     glLoadIdentity()
