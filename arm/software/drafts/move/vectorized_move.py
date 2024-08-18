@@ -83,11 +83,13 @@ print(recv_packet(ser).cmd)
 # )
 # print(recv_packet(ser).cmd)
 
+input()
+
 # MOVE_CARRIAGE 1000
 STEP_PER_M = 1000 / (60 * 0.002)
 send_packet(
     ser,
-    packet_t(buffer=struct.pack("<f", 0.1 * STEP_PER_M), cmd=commands.MOVE_CARRIAGE),
+    packet_t(buffer=struct.pack("<f", 0.3 * STEP_PER_M), cmd=commands.MOVE_CARRIAGE),
 )
 
 print(recv_packet(ser).cmd)
