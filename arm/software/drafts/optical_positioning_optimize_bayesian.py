@@ -144,11 +144,17 @@ def draw_aruco_surface(markers_position):
 TARGET_OFFSET = [0.05, 0.0, 0.025]
 
 initial_p = None
+smallest_dist = 10000
 
 
 def rendering(stop_event, points_data, processing_queue):
     window = optical_render.init()
     imgui_impl = optical_render.init_imgui(window)
+
+    io = imgui.get_io()
+    large_font = io.fonts.add_font_from_file_ttf("Poppins-Regular.ttf", 48.0)
+    # Update your ImGui font texture
+    imgui_impl.refresh_font_texture()
 
     scatter = None
     while not stop_event.is_set() and not optical_render.window_should_close(window):
@@ -159,7 +165,11 @@ def rendering(stop_event, points_data, processing_queue):
                 break
 
         def draw():
-            global initial_p, TARGET_OFFSET
+            global initial_p, TARGET_OFFSET, smallest_dist
+
+            imgui.new_frame()
+            imgui.begin("nelder-mead optimization")
+
             if scatter != None:
                 markers_position, markers_map = scatter
                 points = markers_position[markers_map].reshape((-1, 3))
@@ -192,17 +202,39 @@ def rendering(stop_event, points_data, processing_queue):
                 if type(initial_p) == type(None):
                     initial_p = np.copy(center_point) + TARGET_OFFSET
                 else:
+                    t = initial_p @ optical_render.T
+                    p = center_point @ optical_render.T
+
                     glPointSize(12.0)
                     glBegin(GL_POINTS)
                     glColor3f(0.0, 1.0, 1.0)
-                    glVertex3f(*initial_p @ optical_render.T)
+                    glVertex3f(*t)
                     glEnd()
 
                     glBegin(GL_LINES)
                     glColor3f(0.0, 1.0, 1.0)
-                    glVertex3f(*initial_p @ optical_render.T)
-                    glVertex3f(*center_point @ optical_render.T)
+                    glVertex3f(*t)
+                    glVertex3f(*p)
                     glEnd()
+
+                    smallest_dist = min(np.linalg.norm(t - p) * 1000, smallest_dist)
+
+                    imgui.push_font(large_font)
+                    imgui.text(f"min dist: ")
+
+                    meas = f"{smallest_dist:.2f} mm"
+
+                    window_width = imgui.get_window_size()[0]
+                    text_width = imgui.calc_text_size(meas)[0]
+                    imgui.same_line(
+                        position=window_width
+                        - text_width
+                        - imgui.get_style().item_spacing.x * 2
+                    )
+
+                    imgui.text(meas)
+
+                    imgui.pop_font()
 
                 glPointSize(6.0)
                 glBegin(GL_POINTS)
@@ -224,9 +256,6 @@ def rendering(stop_event, points_data, processing_queue):
                 draw_aruco_surface(markers_position[markers_map])
                 optical_render.draw_points(points)
 
-            imgui.new_frame()
-            imgui.begin("ImGui Window")
-            imgui.text("Hello, world!")
             imgui.end()
             imgui.render()
             imgui_impl.process_inputs()
@@ -297,7 +326,6 @@ def processing(
     # z_max = np.array([180, 180, 180, 180, 180, 180, 180, 180, 180], dtype=int)
     # z_min = np.zeros(9, dtype=int)
 
-    no_block_wait(stop_event, 5.0)
     # s_move_interp(z_min, z_max, 0.75)
 
     print("hardware ready")
@@ -334,7 +362,7 @@ def processing(
             print("processing packet sent")
 
             if previous_vector.sum() == 0.0:
-                wait_time = 2.0
+                wait_time = 5.0
             else:
                 wait_time = (
                     np.abs(previous_vector - np.copy(vector_recv).astype(float)).mean()
