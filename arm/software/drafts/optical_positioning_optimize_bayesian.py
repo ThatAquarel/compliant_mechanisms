@@ -47,7 +47,7 @@ def send_packet(ser_handle, packet: packet_t):
         0x7D,  # U8 end of packet flag
     )
 
-    print(packet_bytes)
+    # print(packet_bytes)
     ser_handle.write(packet_bytes)
 
 
@@ -141,6 +141,11 @@ def draw_aruco_surface(markers_position):
         glEnd()
 
 
+TARGET_OFFSET = [0.05, 0.0, 0.025]
+
+initial_p = None
+
+
 def rendering(stop_event, points_data, processing_queue):
     window = optical_render.init()
     imgui_impl = optical_render.init_imgui(window)
@@ -154,6 +159,7 @@ def rendering(stop_event, points_data, processing_queue):
                 break
 
         def draw():
+            global initial_p, TARGET_OFFSET
             if scatter != None:
                 markers_position, markers_map = scatter
                 points = markers_position[markers_map].reshape((-1, 3))
@@ -182,6 +188,21 @@ def rendering(stop_event, points_data, processing_queue):
                 )
 
                 processing_queue.put(center_point)
+
+                if type(initial_p) == type(None):
+                    initial_p = np.copy(center_point) + TARGET_OFFSET
+                else:
+                    glPointSize(12.0)
+                    glBegin(GL_POINTS)
+                    glColor3f(0.0, 1.0, 1.0)
+                    glVertex3f(*initial_p @ optical_render.T)
+                    glEnd()
+
+                    glBegin(GL_LINES)
+                    glColor3f(0.0, 1.0, 1.0)
+                    glVertex3f(*initial_p @ optical_render.T)
+                    glVertex3f(*center_point @ optical_render.T)
+                    glEnd()
 
                 glPointSize(6.0)
                 glBegin(GL_POINTS)
@@ -229,39 +250,63 @@ def empty_queue(queue):
         try:
             recv = queue.get_nowait()
         except Empty:
-            break
+            if type(recv) != None:
+                break
     return recv
 
 
 def processing(
     stop_event, points_data, processing_queue, evaluate_event, evaluate_pipe
 ):
+    global TARGET_OFFSET
     ser = serial.Serial(port="COM6", baudrate=115200, dsrdtr=True)
 
     send_packet(ser, packet_t(cmd=commands.RESET))
     assert recv_packet(ser).cmd == commands.ACK
 
-    send_packet(ser, packet_t(cmd=commands.HOME_CARRIAGE))
-    assert recv_packet(ser).cmd == commands.ACK
+    # send_packet(ser, packet_t(cmd=commands.HOME_CARRIAGE))
+    # assert recv_packet(ser).cmd == commands.ACK
 
     send_packet(ser, packet_t(cmd=commands.HOME_SERVO))
     assert recv_packet(ser).cmd == commands.ACK
 
     print("hardware reset")
 
-    carriage_ready = False
-    while not carriage_ready:
-        no_block_wait(stop_event, 0.05)
+    def s_move(deg):
         send_packet(
-            ser, packet_t(buffer=struct.pack("<f", 0.0), cmd=commands.MOVE_CARRIAGE)
+            ser,
+            packet_t(
+                buffer=struct.pack(
+                    "<9B",
+                    *np.array(deg, dtype=np.uint8),
+                ),
+                cmd=commands.MOVE_SERVO,
+            ),
         )
-        carriage_ready = recv_packet(ser).cmd != commands.ERR
+        recv_packet(ser)
+
+    def s_move_interp(x1, x2, dt, steps=None):
+        if steps == None:
+            steps = int(dt * 32)
+
+        dx = x2 - x1
+        for i in np.linspace(0, 1, steps):
+            s_move(x1 + dx * i)
+            time.sleep(dt / steps)
+
+    # z_max = np.array([180, 180, 180, 180, 180, 180, 180, 180, 180], dtype=int)
+    # z_min = np.zeros(9, dtype=int)
+
+    no_block_wait(stop_event, 5.0)
+    # s_move_interp(z_min, z_max, 0.75)
+
     print("hardware ready")
 
-    empty_queue(processing_queue)
     print("processing queue realtime")
 
     initial_point = None
+    previous_vector = np.array([0.0, 0.0, 0.0])
+    empty_queue(processing_queue)
     while not stop_event.is_set():
         try:
             center_point = processing_queue.get_nowait()
@@ -270,7 +315,7 @@ def processing(
 
         if type(initial_point) == type(None):
             initial_point = center_point
-            target_point = initial_point + [0.1, 0.00, 0.00]
+            target_point = initial_point + TARGET_OFFSET
             print(f"processing sent target: {target_point}")
             evaluate_pipe.send(target_point)
 
@@ -278,6 +323,7 @@ def processing(
             evaluate_event.clear()
             vector_recv = evaluate_pipe.recv()
             print(f"processing evaluate {vector_recv}")
+            # vector = [*vector_recv, 180, 180, 180, 180, 180, 180]
             vector = [*vector_recv, 0, 0, 0, 0, 0, 0]
             vector = np.clip(vector, 0, 180).astype(np.uint8)
 
@@ -286,10 +332,26 @@ def processing(
                 packet_t(buffer=struct.pack("<9B", *vector), cmd=commands.MOVE_SERVO),
             )
             print("processing packet sent")
-            no_block_wait(stop_event, 2.0)
+
+            if previous_vector.sum() == 0.0:
+                wait_time = 2.0
+            else:
+                wait_time = (
+                    np.abs(previous_vector - np.copy(vector_recv).astype(float)).mean()
+                    / 90
+                )
+                wait_time = np.clip(wait_time, 0.05, 2.0)
+
+            print(f"delay for measure: {wait_time}")
+            no_block_wait(stop_event, wait_time)
+
+            previous_vector = np.copy(vector[0:3]).astype(float)
+
             pos = empty_queue(processing_queue)
             print(f"processing get most recent pos: {pos}")
             evaluate_pipe.send(pos)
+
+    print("stop")
 
     ser.close()
 
