@@ -286,7 +286,7 @@ def processing(
                 packet_t(buffer=struct.pack("<9B", *vector), cmd=commands.MOVE_SERVO),
             )
             print("processing packet sent")
-            no_block_wait(stop_event, 1.0)
+            no_block_wait(stop_event, 2.0)
             pos = empty_queue(processing_queue)
             print(f"processing get most recent pos: {pos}")
             evaluate_pipe.send(pos)
@@ -308,9 +308,27 @@ def optimize(stop_event, evaluate_event, evaluate_pipe):
         print(f"optimize recv {center_point}")
         return np.mean((target_point - center_point) ** 2)
 
-    # Perform the optimization
+    initial_simplex = np.array(
+        [
+            x0,
+            x0 + np.array([180.0, 0.0, 0.0]),
+            x0 + np.array([0.0, 180.0, 0.0]),
+            x0 + np.array([0.0, 0.0, 180.0]),
+        ]
+    )
+
     result = scipy.optimize.minimize(
-        objective, x0, method="Powell", bounds=[(0, 180), (0, 180), (0, 180)]
+        objective,
+        x0,
+        method="Nelder-Mead",
+        bounds=[(0, 180), (0, 180), (0, 180)],
+        options={
+            "xatol": 0.0004,  # Convergence tolerance on x
+            "fatol": 0.0004,  # Convergence tolerance on function value
+            "initial_simplex": initial_simplex,  # Larger initial simplex for faster exploration
+            "maxiter": 20,  # Maximum number of iterations
+            "adaptive": True,  # Disable adaptive mode for more control
+        },
     )
 
     print("The minimum is at:", result.x)

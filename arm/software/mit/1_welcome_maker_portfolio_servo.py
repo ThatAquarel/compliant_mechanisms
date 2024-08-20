@@ -144,10 +144,10 @@ z_max_1 = np.array([180, 180, 180, 180, 180, 180, 0, 0, 0], dtype=int)
 
 reset_servo()
 
-dt = 0.75
+dt = 0.85
 input()
+
 s_move_interp(z_min, z_max, dt)
-input()
 
 s_move_interp(z_max, x_max, dt)
 s_move_interp(x_max, y_min, dt)
@@ -156,7 +156,25 @@ s_move_interp(x_min, y_max, dt)
 s_move_interp(y_max, x_max, dt)
 s_move_interp(x_max, z_max, dt)
 
-input()
 s_move_interp(z_max, z_min, dt)
+
+# input()
+
+# x_max_0 = np.array([*x_max[0:3], *z_max[3:9]])
+# x_min_0 = np.array([*x_min[0:3], *z_max[3:9]])
+# y_max_0 = np.array([*y_max[0:3], *z_max[3:9]])
+# y_min_0 = np.array([*y_min[0:3], *z_max[3:9]])
+
+# dt = dt / 2
+
+# s_move_interp(z_max, x_max_0, dt)
+# s_move_interp(x_max_0, y_min_0, dt)
+# s_move_interp(y_min_0, x_min_0, dt)
+# s_move_interp(x_min_0, y_max_0, dt)
+# s_move_interp(y_max_0, x_max_0, dt)
+# s_move_interp(x_max_0, z_max, dt)
+
+# input()
+# s_move_interp(z_max, z_min, dt)
 
 ser.close()
