@@ -142,17 +142,19 @@ z_min = np.zeros(9, dtype=int)
 z_max_0 = np.array([180, 180, 180, 0, 0, 0, 0, 0, 0], dtype=int)
 z_max_1 = np.array([180, 180, 180, 180, 180, 180, 0, 0, 0], dtype=int)
 
-curve_s = np.array([  0, 180,  68, 180,   0, 175, 180,   0,  38], dtype=int)
+curve_s = np.array([0, 180, 68, 180, 0, 175, 180, 0, 38], dtype=int)
+curve_s_0 = np.array([0, 180, 0, 139, 180, 50, 0, 180, 180], dtype=int)
+
 
 reset_servo()
 
 dt = 2.75
 input()
 
-s_move_interp(z_min, curve_s, dt)
+s_move_interp(z_min, curve_s_0, dt)
 
 input()
 
-s_move_interp(curve_s, z_min, dt)
+s_move_interp(curve_s_0, z_min, dt)
 
 ser.close()
