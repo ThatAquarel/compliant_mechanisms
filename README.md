@@ -52,16 +52,18 @@ This visual positioning data, indeed, completes the feedback loop. A Python scri
     - `simulation/`: Simulation of edges of V2.
 
 - `arm/`: Implementation of shearing auxetics for the bending arm
-    - `hardware/arm_interface`:
-    - `software/`: 
-        - `drafts/`: 
-        - `mit/`: 
+    - `hardware/arm_interface`: Serial interface between computer and hardware with Arduino on PlatformIO 
+    - `software/`: Control loop on Python
+        - `drafts/`: Python control of robotic arm with GUI
+            - `optical_positioning_optimize_center.py`: Nelder-mead optimisation to arm position.
+            - `optical_positioning_optimize_center_manual.py`: Manual slider-control of robotic arm.
+        - `mit/`: Interpolated move examples for MIT Maker Portfolio from recorded positions.
 
-- `optical_positioning/`:
-    - `optical_positioning/`: 
-    - `b_calibrate/`: 
-    - `c_calibrate_matrix/`: 
-    - `drafts/`: 
+- `optical_positioning/`: Optical positioning for motion tracking and control loop feedback
+    - `optical_positioning/`: Optical positioning Python package root.
+    - `b_calibrate/`: Cached calibration images.
+    - `c_calibrate_matrix/`: Cached calibration matrices.
+    - `drafts/`: Testing code for iterative developement.
 
 ## Contact
 
